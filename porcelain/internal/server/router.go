@@ -61,15 +61,81 @@ func NewRouter(cfg config.Config, dexAuth *auth.DexAuth, registry *modules.Regis
 		return c.Send(payload)
 	})
 
-	app.Get("/", renderPage(engine, cfg, registry, "dashboard", "Dashboard", func(c fiber.Ctx) any {
+	app.Get("/", renderPage(engine, cfg, registry, "dashboard", "dashboard", "Dashboard", func(c fiber.Ctx) any {
 		return dashboardData(c.Context(), registry)
 	}))
 
-	app.Get("/storage", renderPage(engine, cfg, registry, "storage", "Storage", func(c fiber.Ctx) any {
+	app.Get("/storage", renderPage(engine, cfg, registry, "storage", "storage", "Storage", func(c fiber.Ctx) any {
 		return storageData(c.Context(), registry)
 	}))
 
+	app.Get("/storage/zfs", renderPage(engine, cfg, registry, "storage-zfs", "zfs", "ZFS", func(c fiber.Ctx) any {
+		return placeholderFor(c.Context(), registry, "zfs", "ZFS",
+			"Pool and dataset rendering arrives in a future slice.",
+			"This page will surface zpool / zfs status, scrub progress, and dataset usage once the live ZFS backend ships.")
+	}))
+
+	app.Get("/network", renderPage(engine, cfg, registry, "network", "network", "Network", func(c fiber.Ctx) any {
+		return networkOverview(c.Context(), registry)
+	}))
+
+	app.Get("/network/firewall", renderPage(engine, cfg, registry, "network-firewall", "firewall", "Firewall", func(c fiber.Ctx) any {
+		return placeholderFor(c.Context(), registry, "firewall", "Firewall",
+			"firewalld zones and rule editing arrive in a future slice.",
+			"This page will render firewalld zones, services, and runtime rules once the live firewalld backend ships.")
+	}))
+
+	app.Get("/network/cloudflare", renderPage(engine, cfg, registry, "network-cloudflare", "cloudflare", "Cloudflare", func(c fiber.Ctx) any {
+		return placeholderFor(c.Context(), registry, "cloudflare", "Cloudflare",
+			"cloudflared tunnel status arrives in a future slice.",
+			"This page will surface tunnel state, ingress routes, and edge connectivity once the cloudflared client lands.")
+	}))
+
 	return app, nil
+}
+
+// placeholderFor builds a generic PlaceholderData payload for a module-level
+// page that has not yet shipped its full UI. The status badge is taken from
+// the registry when the named module is registered.
+func placeholderFor(ctx context.Context, registry *modules.Registry, id, heading, blurb, detail string) viewdata.PlaceholderData {
+	data := viewdata.PlaceholderData{Heading: heading, Blurb: blurb, Detail: detail}
+	if registry == nil {
+		return data
+	}
+	if m, ok := registry.Get(id); ok {
+		data.StatusBadge = badgeFor(m.Status(ctx))
+	}
+	return data
+}
+
+// networkOverview composes the Network landing page from the Firewall and
+// Cloudflare sub-modules so the user sees both at a glance.
+func networkOverview(ctx context.Context, registry *modules.Registry) viewdata.PlaceholderData {
+	data := viewdata.PlaceholderData{
+		Heading: "Network",
+		Blurb:   "Interface, firewall, and tunnel summary",
+		Detail:  "Pick a sub-page below to drill into a specific networking concern.",
+	}
+	for _, child := range []struct {
+		id, name, path string
+	}{
+		{"firewall", "Firewall", "/network/firewall"},
+		{"cloudflare", "Cloudflare", "/network/cloudflare"},
+	} {
+		entry := templates.ModuleNav{ID: child.id, Name: child.name, Path: child.path}
+		if registry != nil {
+			if m, ok := registry.Get(child.id); ok {
+				entry.StatusBadge = badgeFor(m.Status(ctx))
+			}
+		}
+		data.Children = append(data.Children, entry)
+	}
+	if registry != nil {
+		if m, ok := registry.Get("network"); ok {
+			data.StatusBadge = badgeFor(m.Status(ctx))
+		}
+	}
+	return data
 }
 
 // dashboardData composes the dashboard payload, preferring real diagnostics
@@ -145,14 +211,14 @@ func renderPage(
 	engine *templates.Engine,
 	cfg config.Config,
 	registry *modules.Registry,
-	page, title string,
+	page, currentID, title string,
 	build func(c fiber.Ctx) any,
 ) fiber.Handler {
 	return func(c fiber.Ctx) error {
 		data := templates.TemplateData{
 			Title:         title,
-			CurrentModule: page,
-			Modules:       sidebarModules(c.Context(), registry, page),
+			CurrentModule: currentID,
+			Modules:       sidebarModules(c.Context(), registry, currentID),
 			User:          buildUserInfo(c, cfg),
 			Data:          build(c),
 		}
@@ -274,7 +340,10 @@ func staticHandler(staticFS fs.FS) fiber.Handler {
 		}
 
 		c.Set(fiber.HeaderContentType, contentTypeFor(clean))
-		c.Set("Cache-Control", "public, max-age=300")
+		// no-cache forces revalidation each request so dev CSS edits surface
+		// immediately. Embedded asset reads are O(memcpy); the bandwidth hit is
+		// negligible for the porcelain UI footprint.
+		c.Set("Cache-Control", "no-cache")
 		return c.Send(body)
 	}
 }
@@ -321,21 +390,70 @@ func moduleCards() []api.ModuleView {
 }
 
 // sidebarModules returns the navigation entries with status badges overlaid
-// from the registered modules.
+// from the registered modules. Group entries (those with Children) get a
+// rolled-up badge: worst-of (Unavailable > Degraded > OK) across registered
+// children. Children with no registered module are skipped from the rollup.
 func sidebarModules(ctx context.Context, registry *modules.Registry, currentID string) []templates.ModuleNav {
 	nav := viewdata.SidebarModules(currentID)
 	if registry == nil {
 		return nav
 	}
 	for i := range nav {
-		m, ok := registry.Get(nav[i].ID)
+		// Apply child badges first.
+		for j := range nav[i].Children {
+			if m, ok := registry.Get(nav[i].Children[j].ID); ok {
+				nav[i].Children[j].StatusBadge = badgeFor(m.Status(ctx))
+			}
+		}
+		// Then determine the parent's badge: explicit module status if
+		// registered, otherwise rolled up from children.
+		if m, ok := registry.Get(nav[i].ID); ok {
+			nav[i].StatusBadge = badgeFor(m.Status(ctx))
+		} else if len(nav[i].Children) > 0 {
+			nav[i].StatusBadge = rolledUpBadge(ctx, registry, nav[i].Children)
+		}
+	}
+	return nav
+}
+
+// rolledUpBadge returns the worst-of-children badge (Unavailable > Degraded >
+// OK). Returns nil when no child is registered.
+func rolledUpBadge(ctx context.Context, registry *modules.Registry, children []templates.ModuleNav) *templates.StatusBadge {
+	worst := -1
+	for _, ch := range children {
+		m, ok := registry.Get(ch.ID)
 		if !ok {
 			continue
 		}
-		st := m.Status(ctx)
-		nav[i].StatusBadge = badgeFor(st)
+		rank := healthRank(m.Status(ctx).Health)
+		if rank > worst {
+			worst = rank
+		}
 	}
-	return nav
+	switch worst {
+	case 0:
+		return &templates.StatusBadge{Text: "ok", Class: "badge-success"}
+	case 1:
+		return &templates.StatusBadge{Text: "dev", Class: "badge-warning"}
+	case 2:
+		return &templates.StatusBadge{Text: "off", Class: "badge-danger"}
+	default:
+		return nil
+	}
+}
+
+// healthRank orders Health values so worst-of comparisons are numeric.
+func healthRank(h modules.Health) int {
+	switch h {
+	case modules.HealthOK:
+		return 0
+	case modules.HealthDegraded:
+		return 1
+	case modules.HealthUnavailable:
+		return 2
+	default:
+		return -1
+	}
 }
 
 // badgeFor maps a Module Status onto the sidebar badge style.

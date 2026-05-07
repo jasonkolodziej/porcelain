@@ -157,8 +157,7 @@
                             <span class="font-mono text-xs" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">{{ .Value }}</span>
                         </div>
                         <div class="h-2 rounded-full overflow-hidden" :class="darkMode ? 'bg-porcelain-800' : 'bg-porcelain-100'">
-                            <div class="h-full rounded-full transition-all duration-1000 ease-out"
-                                 :class=".Color"
+                            <div class="h-full rounded-full transition-all duration-1000 ease-out {{ .Color }}"
                                  style="width: {{ .Percentage }}%"></div>
                         </div>
                     </div>
@@ -183,8 +182,7 @@
                             </svg>
                             <span class="text-sm" :class="darkMode ? 'text-porcelain-300' : 'text-porcelain-700'">{{ .Name }}</span>
                         </div>
-                        <span class="font-mono text-sm font-medium"
-                              :class=".Critical ? 'text-accent-rose' : 'text-accent-cyan'">
+                                                <span class="font-mono text-sm font-medium {{ if .Critical }}text-accent-rose{{ else }}text-accent-cyan{{ end }}">
                             {{ .Value }}{{ .Unit }}
                         </span>
                     </div>

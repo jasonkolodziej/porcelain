@@ -141,7 +141,7 @@
                         <div>
                             <h3 class="font-semibold" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">{{ .Name }}</h3>
                             <div class="flex items-center gap-2 mt-0.5">
-                                <span class="badge" :class=".Health === 'ONLINE' ? 'badge-success' : 'badge-danger'">
+                                <span class="badge {{ if eq .Health "ONLINE" }}badge-success{{ else }}badge-danger{{ end }}">
                                     {{ .Health }}
                                 </span>
                                 <span class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">{{ .RaidType }}</span>
@@ -159,8 +159,7 @@
                 <!-- Capacity Bar -->
                 <div class="mb-4">
                     <div class="h-3 rounded-full overflow-hidden" :class="darkMode ? 'bg-porcelain-800' : 'bg-porcelain-100'">
-                        <div class="h-full rounded-full transition-all duration-700 relative overflow-hidden"
-                             :class=".Allocated > .Size * 0.9 ? 'bg-gradient-to-r from-accent-amber to-accent-rose' : 'bg-gradient-to-r from-accent-emerald to-accent-cyan'"
+                        <div class="h-full rounded-full transition-all duration-700 relative overflow-hidden {{ if gt (percentage .Allocated .Size) 90.0 }}bg-gradient-to-r from-accent-amber to-accent-rose{{ else }}bg-gradient-to-r from-accent-emerald to-accent-cyan{{ end }}"
                              style="width: {{ percentageString .Allocated .Size }}%">
                             <div class="absolute inset-0 animate-shimmer"></div>
                         </div>

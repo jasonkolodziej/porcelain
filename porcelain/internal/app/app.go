@@ -9,8 +9,12 @@ import (
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/config"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/dbus"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/cloudflare"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/diagnostics"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/firewall"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/network"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/storage"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/zfs"
 	runtimeSecrets "github.com/jasonkolodziej/porcelain/porcelain/internal/secrets"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/server"
 	secretspkg "github.com/jasonkolodziej/porcelain/porcelain/pkg/secrets"
@@ -71,6 +75,10 @@ func New(ctx context.Context, cfg config.Config) (*Application, error) {
 
 	registry := modules.NewRegistry()
 	registry.Register(storage.NewFromConnection(ctx, dbusManager))
+	registry.Register(zfs.New(ctx))
+	registry.Register(network.NewFromConnection(ctx, dbusManager))
+	registry.Register(firewall.NewFromConnection(ctx, dbusManager))
+	registry.Register(cloudflare.New(ctx))
 	registry.Register(diagnostics.NewFromConnection(ctx, dbusManager))
 
 	httpServer, err := server.New(cfg, dexAuth, certStore, tlsManager, registry)

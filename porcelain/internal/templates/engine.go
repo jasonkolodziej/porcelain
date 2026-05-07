@@ -30,6 +30,10 @@ type pageEntry struct {
 var pages = []pageEntry{
 	{name: "dashboard", file: "dashboard.html"},
 	{name: "storage", file: "modules/storage.html"},
+	{name: "storage-zfs", file: "modules/placeholder.html"},
+	{name: "network", file: "modules/placeholder.html"},
+	{name: "network-firewall", file: "modules/placeholder.html"},
+	{name: "network-cloudflare", file: "modules/placeholder.html"},
 }
 
 // Engine renders pages with a shared base layout and exposes the embedded

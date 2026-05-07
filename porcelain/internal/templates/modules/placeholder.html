@@ -1,0 +1,53 @@
+{{ define "content" }}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight"
+                :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                {{ .Data.Heading }}
+            </h1>
+            <p class="mt-1 text-sm"
+               :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+                {{ .Data.Blurb }}
+            </p>
+        </div>
+        {{ if .Data.StatusBadge }}
+        <span class="self-start text-xs px-2 py-1 rounded-full {{ .Data.StatusBadge.Class }}">
+            {{ .Data.StatusBadge.Text }}
+        </span>
+        {{ end }}
+    </div>
+
+    <div class="rounded-2xl border p-6"
+         :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <h2 class="text-lg font-semibold mb-2"
+            :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+            Coming soon
+        </h2>
+        <p class="text-sm"
+           :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">
+            {{ .Data.Detail }}
+        </p>
+        {{ if .Data.Children }}
+        <ul class="mt-4 space-y-2">
+            {{ range .Data.Children }}
+            <li class="flex items-center justify-between rounded-lg border px-3 py-2"
+                :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                <a href="{{ .Path }}"
+                   hx-get="{{ .Path }}" hx-target="#main-content" hx-push-url="true"
+                   class="text-sm font-medium hover:underline"
+                   :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                    {{ .Name }}
+                </a>
+                {{ if .StatusBadge }}
+                <span class="text-xs px-1.5 py-0.5 rounded-full {{ .StatusBadge.Class }}">
+                    {{ .StatusBadge.Text }}
+                </span>
+                {{ end }}
+            </li>
+            {{ end }}
+        </ul>
+        {{ end }}
+    </div>
+</div>
+{{ end }}

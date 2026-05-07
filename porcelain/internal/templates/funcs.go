@@ -82,6 +82,19 @@ var funcMap = template.FuncMap{
 	},
 	"safeHTML": func(s string) template.HTML { return template.HTML(s) },
 	"safeJS":   func(s string) template.JS { return template.JS(s) },
+	// navGroupOpen returns "true" when a sidebar group should render expanded
+	// because the current module is the group itself or one of its children.
+	"navGroupOpen": func(currentID string, group ModuleNav) string {
+		if currentID == group.ID {
+			return "true"
+		}
+		for _, child := range group.Children {
+			if currentID == child.ID {
+				return "true"
+			}
+		}
+		return "false"
+	},
 }
 
 // humanizeBytes renders a byte count as a human-friendly string.

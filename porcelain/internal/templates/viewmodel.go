@@ -16,12 +16,17 @@ type TemplateData struct {
 }
 
 // ModuleNav describes one entry in the persistent sidebar.
+//
+// When Children is non-empty the entry renders as a collapsible group whose
+// own row links to a group "overview" page (Path) and whose Children render
+// as indented leaves. Status rollup for groups happens in the router.
 type ModuleNav struct {
 	ID          string
 	Name        string
 	Path        string
 	IconSVG     template.HTML
 	StatusBadge *StatusBadge
+	Children    []ModuleNav
 }
 
 // StatusBadge is the optional pill rendered next to a module name.

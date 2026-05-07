@@ -43,6 +43,9 @@
     <!-- Alpine Persist Plugin (must load before Alpine core so plugin registers in time) -->
     <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.14.3/dist/cdn.min.js"></script>
 
+    <!-- Alpine Collapse Plugin (used by sidebar group disclosure) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.14.3/dist/cdn.min.js"></script>
+
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
 
@@ -59,67 +62,99 @@
     {{ end }}
 
     <!-- Tailwind Config Override -->
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        porcelain: {
-                            50:  'var(--porcelain-50)',
-                            100: 'var(--porcelain-100)',
-                            200: 'var(--porcelain-200)',
-                            300: 'var(--porcelain-300)',
-                            400: 'var(--porcelain-400)',
-                            500: 'var(--porcelain-500)',
-                            600: 'var(--porcelain-600)',
-                            700: 'var(--porcelain-700)',
-                            800: 'var(--porcelain-800)',
-                            900: 'var(--porcelain-900)',
-                            950: 'var(--porcelain-950)',
-                        },
-                        accent: {
-                            cyan:    'var(--accent-cyan)',
-                            teal:    'var(--accent-teal)',
-                            emerald: 'var(--accent-emerald)',
-                            amber:   'var(--accent-amber)',
-                            rose:    'var(--accent-rose)',
-                            violet:  'var(--accent-violet)',
-                        }
+<!-- In base.html <script> tailwind.config section -->
+<script>
+    tailwind.config = {
+        darkMode: 'class',
+        theme: {
+            extend: {
+                colors: {
+                    porcelain: {
+                        50:  'var(--porcelain-50)',
+                        100: 'var(--porcelain-100)',
+                        200: 'var(--porcelain-200)',
+                        300: 'var(--porcelain-300)',
+                        400: 'var(--porcelain-400)',
+                        500: 'var(--porcelain-500)',
+                        600: 'var(--porcelain-600)',
+                        700: 'var(--porcelain-700)',
+                        800: 'var(--porcelain-800)',
+                        900: 'var(--porcelain-900)',
+                        950: 'var(--porcelain-950)',
                     },
-                    fontFamily: {
-                        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
-                        mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
+                    /* GitHub Brand Accents */
+                    github: {
+                        green: {
+                            1: 'var(--green-1)',
+                            2: 'var(--green-2)',
+                            3: 'var(--green-3)',
+                            4: 'var(--green-4)',  /* hero */
+                            5: 'var(--green-5)',
+                            6: 'var(--green-6)',
+                        },
+                        purple: {
+                            1: 'var(--purple-1)',
+                            2: 'var(--purple-2)',
+                            3: 'var(--purple-3)',  /* copilot */
+                            4: 'var(--purple-4)',
+                            5: 'var(--purple-5)',
+                            6: 'var(--purple-6)',
+                        },
+                        blue: {
+                            1: 'var(--blue-1)',
+                            2: 'var(--blue-2)',   /* security */
+                            3: 'var(--blue-3)',
+                            4: 'var(--blue-4)',
+                            5: 'var(--blue-5)',
+                            6: 'var(--blue-6)',
+                        },
                     },
-                    animation: {
-                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                        'glow': 'glow 2s ease-in-out infinite alternate',
-                        'slide-in': 'slideIn 0.3s ease-out',
-                        'fade-in': 'fadeIn 0.2s ease-out',
-                    },
-                    keyframes: {
-                        glow: {
-                            '0%': { boxShadow: '0 0 5px var(--glow-color)' },
-                            '100%': { boxShadow: '0 0 20px var(--glow-color), 0 0 40px var(--glow-color)' },
-                        },
-                        slideIn: {
-                            '0%': { transform: 'translateX(-100%)', opacity: '0' },
-                            '100%': { transform: 'translateX(0)', opacity: '1' },
-                        },
-                        fadeIn: {
-                            '0%': { opacity: '0', transform: 'translateY(-10px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' },
-                        },
+                    /* Semantic aliases for templates */
+                    accent: {
+                        primary:   'var(--accent-primary)',      /* GitHub Green */
+                        secondary: 'var(--accent-secondary)',    /* Copilot Purple */
+                        tertiary:  'var(--accent-tertiary)',     /* Security Blue */
+                        success:   'var(--accent-success)',
+                        warning:   'var(--accent-warning)',
+                        danger:    'var(--accent-danger)',
+                        info:      'var(--accent-info)',
                     }
+                },
+                fontFamily: {
+                    sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+                    mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
+                },
+                animation: {
+                    'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    'glow': 'glow 2s ease-in-out infinite alternate',
+                    'slide-in': 'slideIn 0.3s ease-out',
+                    'fade-in': 'fadeIn 0.2s ease-out',
+                },
+                keyframes: {
+                    glow: {
+                        '0%': { boxShadow: '0 0 5px var(--glow-primary)' },
+                        '100%': { boxShadow: '0 0 20px var(--glow-primary), 0 0 40px var(--glow-primary)' },
+                    },
+                    slideIn: {
+                        '0%': { transform: 'translateX(-100%)', opacity: '0' },
+                        '100%': { transform: 'translateX(0)', opacity: '1' },
+                    },
+                    fadeIn: {
+                        '0%': { opacity: '0', transform: 'translateY(-10px)' },
+                        '100%': { opacity: '1', transform: 'translateY(0)' },
+                    },
                 }
             }
         }
-    </script>
+    }
+</script>
 
     <style>
-        /* Critical inline styles for FOUC prevention */
-        html.dark { background-color: #020617; }
-        html:not(.dark) { background-color: #f8fafc; }
+        /* Critical inline styles for FOUC prevention. Uses literal porcelain
+           colors (cannot reference :root vars before stylesheet loads). */
+        html.dark { background-color: #0A0D0B; }
+        html:not(.dark) { background-color: #F2F5F3; }
+        [x-cloak] { display: none !important; }
     </style>
 </head>
 
@@ -128,6 +163,7 @@
 
     <!-- Toast Container -->
     <div class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"
+            x-cloak
          x-show="toastQueue.length > 0"
          x-transition>
         <template x-for="toast in toastQueue" :key="toast.id">
@@ -152,6 +188,7 @@
 
     <!-- Modal Overlay -->
     <div x-show="modalOpen"
+            x-cloak
          class="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm"
          x-transition.opacity
          @click="modalOpen = false">
@@ -195,8 +232,98 @@
         <!-- Navigation -->
         <nav class="p-3 space-y-1 overflow-y-auto" style="height: calc(100vh - 8rem);">
             {{ range .Modules }}
+            {{ if .Children }}
+            <!-- Group entry: collapsible parent + children. Defaults open if
+                 the current module is this group or one of its children. -->
+            <div x-data="{ open: {{ navGroupOpen $.CurrentModule . }} }">
+                <a href="{{ .Path }}"
+                   class="group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative"
+                   :class="[
+                     currentModule === '{{ .ID }}'
+                       ? (darkMode ? 'bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20' : 'bg-accent-cyan/5 text-accent-cyan border border-accent-cyan/20')
+                       : (darkMode ? 'text-porcelain-400 hover:bg-porcelain-800/50 hover:text-porcelain-200' : 'text-porcelain-600 hover:bg-porcelain-100 hover:text-porcelain-900'),
+                     (sidebarPinned || sidebarOpen) ? '' : 'lg:justify-center'
+                   ]"
+                   hx-get="{{ .Path }}"
+                   hx-target="#main-content"
+                   hx-push-url="true"
+                   @click="currentModule = '{{ .ID }}'; open = true">
+
+                    {{ if eq $.CurrentModule .ID }}
+                    <div class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-accent-cyan"></div>
+                    {{ end }}
+
+                    <div class="relative flex-shrink-0 w-5 h-5">
+                        {{ .IconSVG }}
+                        {{ if eq $.CurrentModule .ID }}
+                        <div class="absolute inset-0 animate-pulse-slow bg-accent-cyan/20 rounded-full blur-md"></div>
+                        {{ end }}
+                    </div>
+
+                    <span class="text-sm font-medium whitespace-nowrap transition-all duration-200"
+                          :class="(sidebarPinned || sidebarOpen) ? 'opacity-100 w-auto' : 'lg:opacity-0 lg:w-0 lg:overflow-hidden'">
+                        {{ .Name }}
+                    </span>
+
+                    {{ if .StatusBadge }}
+                    <span class="ml-auto text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 transition-opacity duration-200 {{ .StatusBadge.Class }}"
+                          :class="(sidebarPinned || sidebarOpen) ? 'opacity-100' : 'lg:opacity-0'">
+                        {{ .StatusBadge.Text }}
+                    </span>
+                    {{ end }}
+
+                    <!-- Disclosure caret. Stops the link click so toggling
+                         doesn't navigate. -->
+                    <button type="button"
+                            class="ml-1 p-1 rounded-md transition-colors flex-shrink-0"
+                            :class="[
+                              (sidebarPinned || sidebarOpen) ? 'opacity-100' : 'lg:opacity-0',
+                              darkMode ? 'hover:bg-porcelain-800/60' : 'hover:bg-porcelain-100'
+                            ]"
+                            @click.stop.prevent="open = !open"
+                            :aria-expanded="open ? 'true' : 'false'"
+                            aria-label="Toggle {{ .Name }} group">
+                        <svg class="w-4 h-4 transition-transform duration-200"
+                             :class="open ? 'rotate-90' : ''"
+                             fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M9 5l7 7-7 7"/>
+                        </svg>
+                    </button>
+                </a>
+
+                <!-- Children. Hidden when collapsed; also hidden when the
+                     sidebar rail is collapsed (icon-only) since indented
+                     children would just stack icons noisily. -->
+                <div x-show="open && (sidebarPinned || sidebarOpen)"
+                     x-collapse
+                     class="mt-1 space-y-1 ml-5 pl-3 border-l"
+                     :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                    {{ range .Children }}
+                    <a href="{{ .Path }}"
+                       class="group flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-200 relative"
+                       :class="currentModule === '{{ .ID }}'
+                         ? (darkMode ? 'bg-accent-cyan/10 text-accent-cyan' : 'bg-accent-cyan/5 text-accent-cyan')
+                         : (darkMode ? 'text-porcelain-400 hover:bg-porcelain-800/40 hover:text-porcelain-200' : 'text-porcelain-600 hover:bg-porcelain-100 hover:text-porcelain-900')"
+                       hx-get="{{ .Path }}"
+                       hx-target="#main-content"
+                       hx-push-url="true"
+                       @click="currentModule = '{{ .ID }}'">
+                        <div class="flex-shrink-0 w-4 h-4">{{ .IconSVG }}</div>
+                        <span class="text-xs font-medium whitespace-nowrap">{{ .Name }}</span>
+                        {{ if .StatusBadge }}
+                        <span class="ml-auto text-[0.625rem] px-1 py-0.5 rounded-full flex-shrink-0 {{ .StatusBadge.Class }}">
+                            {{ .StatusBadge.Text }}
+                        </span>
+                        {{ end }}
+                    </a>
+                    {{ end }}
+                </div>
+            </div>
+            {{ else }}
+            <!-- Leaf entry. -->
             <a href="{{ .Path }}"
-               class="group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden"
+               class="group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative"
                :class="[
                  currentModule === '{{ .ID }}'
                    ? (darkMode ? 'bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20' : 'bg-accent-cyan/5 text-accent-cyan border border-accent-cyan/20')
@@ -206,36 +333,32 @@
                hx-get="{{ .Path }}"
                hx-target="#main-content"
                hx-push-url="true"
-               hx-indicator="#nav-indicator-{{ .ID }}"
                @click="currentModule = '{{ .ID }}'">
 
-                <!-- Active Indicator -->
-                <div x-show="currentModule === '{{ .ID }}'"
-                     class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-accent-cyan"
-                     x-transition></div>
+                {{ if eq $.CurrentModule .ID }}
+                <div class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-accent-cyan"></div>
+                {{ end }}
 
-                <!-- Icon -->
                 <div class="relative flex-shrink-0 w-5 h-5">
                     {{ .IconSVG }}
-                    <div x-show="currentModule === '{{ .ID }}'"
-                         class="absolute inset-0 animate-pulse-slow bg-accent-cyan/20 rounded-full blur-md"></div>
+                    {{ if eq $.CurrentModule .ID }}
+                    <div class="absolute inset-0 animate-pulse-slow bg-accent-cyan/20 rounded-full blur-md"></div>
+                    {{ end }}
                 </div>
 
-                <!-- Label -->
                 <span class="text-sm font-medium whitespace-nowrap transition-all duration-200"
                       :class="(sidebarPinned || sidebarOpen) ? 'opacity-100 w-auto' : 'lg:opacity-0 lg:w-0 lg:overflow-hidden'">
                     {{ .Name }}
                 </span>
 
-                <!-- Status Badge -->
                 {{ if .StatusBadge }}
-                <span class="ml-auto text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
-                      :class="(sidebarPinned || sidebarOpen) ? 'opacity-100' : 'lg:opacity-0'"
-                      :class="{{ .StatusBadge.Class }}">
+                <span class="ml-auto text-xs px-1.5 py-0.5 rounded-full flex-shrink-0 transition-opacity duration-200 {{ .StatusBadge.Class }}"
+                      :class="(sidebarPinned || sidebarOpen) ? 'opacity-100' : 'lg:opacity-0'">
                     {{ .StatusBadge.Text }}
                 </span>
                 {{ end }}
             </a>
+            {{ end }}
             {{ end }}
         </nav>
 
@@ -261,7 +384,7 @@
     <div id="main-wrapper"
          class="min-h-screen transition-all duration-300"
          :class="[
-           sidebarPinned ? 'lg:ml-64' : 'lg:ml-20',
+                     (sidebarPinned || sidebarOpen) ? 'lg:ml-64' : 'lg:ml-20',
            'pt-16'
          ]">
 
@@ -269,7 +392,7 @@
         <header class="fixed top-0 right-0 z-30 h-16 border-b backdrop-blur-xl transition-all duration-300"
                 :class="[
                   darkMode ? 'bg-porcelain-950/80 border-porcelain-800' : 'bg-white/80 border-porcelain-200',
-                  sidebarPinned ? 'left-64' : 'left-20'
+                                    (sidebarPinned || sidebarOpen) ? 'left-64' : 'left-20'
                 ]">
             <div class="h-full flex items-center justify-between px-6">
                 <!-- Breadcrumb -->
@@ -315,6 +438,7 @@
                         </button>
 
                         <div x-show="open"
+                                x-cloak
                              x-transition
                              class="absolute right-0 mt-2 w-48 rounded-xl border shadow-xl py-1"
                              :class="darkMode ? 'bg-porcelain-900 border-porcelain-800' : 'bg-white border-porcelain-200'">
