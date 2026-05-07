@@ -23,6 +23,19 @@
         <p class="text-sm" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">{{ .Data.Detail }}</p>
     </div>
 
+    <section class="rounded-2xl border p-4"
+             :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <div class="flex items-center justify-between mb-2">
+            <h2 class="text-sm font-semibold uppercase tracking-wide" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">History Output</h2>
+            <span class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Sampled on each page refresh</span>
+        </div>
+        <div id="sensor-history-output"
+             class="min-h-24 rounded-lg border p-3 font-mono text-xs whitespace-pre-wrap"
+             :class="darkMode ? 'border-porcelain-800 text-porcelain-300 bg-porcelain-950/60' : 'border-porcelain-200 text-porcelain-700 bg-porcelain-50'">
+            Select a reading and click History to view recent samples.
+        </div>
+    </section>
+
     {{ if eq (len .Data.Chips) 0 }}
     <div class="rounded-2xl border p-6"
          :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
@@ -31,6 +44,7 @@
     {{ else }}
     <div class="space-y-4">
         {{ range .Data.Chips }}
+        {{ $chipName := .Name }}
         <section class="rounded-2xl border p-4"
                  :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
             <h2 class="text-lg font-semibold mb-3" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">{{ .Name }}</h2>
@@ -48,6 +62,30 @@
                     <div class="mt-1 text-xs flex gap-4" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">
                         <span>high: {{ if .High }}{{ .High }}{{ else }}—{{ end }}</span>
                         <span>critical: {{ if .Threshold }}{{ .Threshold }}{{ else }}—{{ end }}</span>
+                    </div>
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                        <button class="btn btn-secondary btn-sm"
+                            hx-get="/api/sensors/history?chip={{ $chipName }}&reading={{ .Name }}&limit=60"
+                                hx-target="#sensor-history-output"
+                                hx-swap="innerHTML">
+                            History
+                        </button>
+                        <form class="flex items-center gap-2"
+                              hx-post="/api/sensors/thresholds"
+                              hx-swap="none"
+                                                            @htmx:afterRequest="$dispatch('toast', { message: 'Threshold updated for {{ $chipName }}/{{ .Name }}', type: 'success' })">
+                                                        <input type="hidden" name="chip" value="{{ $chipName }}">
+                            <input type="hidden" name="reading" value="{{ .Name }}">
+                            <input class="porcelain-input h-8" name="threshold" placeholder="crit" style="width: 6rem;">
+                            <button type="submit" class="btn btn-secondary btn-sm">Set alert</button>
+                        </form>
+                        <form hx-post="/api/sensors/thresholds/clear"
+                              hx-swap="none"
+                              @htmx:afterRequest="$dispatch('toast', { message: 'Threshold cleared for {{ $chipName }}/{{ .Name }}', type: 'info' })">
+                            <input type="hidden" name="chip" value="{{ $chipName }}">
+                            <input type="hidden" name="reading" value="{{ .Name }}">
+                            <button class="btn btn-secondary btn-sm" type="submit">Clear alert</button>
+                        </form>
                     </div>
                 </div>
                 {{ end }}

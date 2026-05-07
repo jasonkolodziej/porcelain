@@ -233,6 +233,8 @@ type DiagnosticsPageData struct {
 	RunningServices int
 	TotalServices   int
 	Services        []DiagnosticsService
+	JournalTail     []string
+	OSTreeStatus    string
 	Modules         []DiagnosticsModuleStatus
 	StatusBadge     *templates.StatusBadge
 	BundlePath      string

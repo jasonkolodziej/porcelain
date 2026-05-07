@@ -4,6 +4,7 @@ package podman
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -160,6 +161,209 @@ func (m *Module) ContainerLogs(ctx context.Context, containerID string, tail int
 		return "", fmt.Errorf("podman logs failed: %w", err)
 	}
 	return string(out), nil
+}
+
+// InspectContainer returns normalized JSON for podman inspect <container>.
+func (m *Module) InspectContainer(ctx context.Context, containerID string) (string, error) {
+	if m == nil || m.mode == "fake" {
+		return "", fmt.Errorf("podman not installed")
+	}
+	containerID = strings.TrimSpace(containerID)
+	if containerID == "" {
+		return "", fmt.Errorf("container id/name is required")
+	}
+
+	inspectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(inspectCtx, "podman", "inspect", containerID)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(out))
+		if text != "" {
+			return "", fmt.Errorf("podman inspect failed: %s", text)
+		}
+		return "", fmt.Errorf("podman inspect failed: %w", err)
+	}
+
+	var parsed any
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		return "", fmt.Errorf("parse inspect json: %w", err)
+	}
+	normalized, err := json.MarshalIndent(parsed, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("encode inspect json: %w", err)
+	}
+	return string(normalized), nil
+}
+
+// InspectImage returns normalized JSON for podman image inspect <image>.
+func (m *Module) InspectImage(ctx context.Context, imageRef string) (string, error) {
+	if m == nil || m.mode == "fake" {
+		return "", fmt.Errorf("podman not installed")
+	}
+	imageRef = strings.TrimSpace(imageRef)
+	if imageRef == "" {
+		return "", fmt.Errorf("image reference is required")
+	}
+
+	inspectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(inspectCtx, "podman", "image", "inspect", imageRef)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(out))
+		if text != "" {
+			return "", fmt.Errorf("podman image inspect failed: %s", text)
+		}
+		return "", fmt.Errorf("podman image inspect failed: %w", err)
+	}
+
+	var parsed any
+	if err := json.Unmarshal(out, &parsed); err != nil {
+		return "", fmt.Errorf("parse image inspect json: %w", err)
+	}
+	normalized, err := json.MarshalIndent(parsed, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("encode image inspect json: %w", err)
+	}
+	return string(normalized), nil
+}
+
+// Exec runs a command in a running container and returns combined output.
+func (m *Module) Exec(ctx context.Context, containerID string, command []string) (string, error) {
+	if m == nil || m.mode == "fake" {
+		return "", fmt.Errorf("podman not installed")
+	}
+	containerID = strings.TrimSpace(containerID)
+	if containerID == "" {
+		return "", fmt.Errorf("container id/name is required")
+	}
+	if len(command) == 0 {
+		return "", fmt.Errorf("exec command is required")
+	}
+
+	args := []string{"exec", containerID}
+	args = append(args, command...)
+
+	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(execCtx, "podman", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(out))
+		if text != "" {
+			return "", fmt.Errorf("podman exec failed: %s", text)
+		}
+		return "", fmt.Errorf("podman exec failed: %w", err)
+	}
+	return string(out), nil
+}
+
+// PullImage pulls an image from a registry.
+func (m *Module) PullImage(ctx context.Context, imageRef string) (string, error) {
+	if m == nil || m.mode == "fake" {
+		return "", fmt.Errorf("podman not installed")
+	}
+	imageRef = strings.TrimSpace(imageRef)
+	if imageRef == "" {
+		return "", fmt.Errorf("image reference is required")
+	}
+
+	pullCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(pullCtx, "podman", "pull", imageRef)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(out))
+		if text != "" {
+			return "", fmt.Errorf("podman pull failed: %s", text)
+		}
+		return "", fmt.Errorf("podman pull failed: %w", err)
+	}
+	return string(out), nil
+}
+
+// BuildImage builds a local image from a context path and optional Dockerfile.
+func (m *Module) BuildImage(ctx context.Context, contextPath, dockerfilePath, tag string) (string, error) {
+	if m == nil || m.mode == "fake" {
+		return "", fmt.Errorf("podman not installed")
+	}
+	contextPath = strings.TrimSpace(contextPath)
+	if contextPath == "" {
+		return "", fmt.Errorf("build context path is required")
+	}
+
+	args := []string{"build"}
+	if strings.TrimSpace(dockerfilePath) != "" {
+		args = append(args, "-f", strings.TrimSpace(dockerfilePath))
+	}
+	if strings.TrimSpace(tag) != "" {
+		args = append(args, "-t", strings.TrimSpace(tag))
+	}
+	args = append(args, contextPath)
+
+	buildCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(buildCtx, "podman", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(out))
+		if text != "" {
+			return "", fmt.Errorf("podman build failed: %s", text)
+		}
+		return "", fmt.Errorf("podman build failed: %w", err)
+	}
+	return string(out), nil
+}
+
+// RegistryLogin authenticates podman to a remote registry.
+func (m *Module) RegistryLogin(ctx context.Context, registry, username, password string) error {
+	if m == nil || m.mode == "fake" {
+		return fmt.Errorf("podman not installed")
+	}
+	registry = strings.TrimSpace(registry)
+	username = strings.TrimSpace(username)
+	if registry == "" || username == "" || password == "" {
+		return fmt.Errorf("registry, username, and password are required")
+	}
+
+	loginCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(loginCtx, "podman", "login", "--username", username, "--password-stdin", registry)
+	cmd.Stdin = strings.NewReader(password)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(out))
+		if text != "" {
+			return fmt.Errorf("podman login failed: %s", text)
+		}
+		return fmt.Errorf("podman login failed: %w", err)
+	}
+	return nil
+}
+
+// RegistryLogout removes stored credentials for a registry.
+func (m *Module) RegistryLogout(ctx context.Context, registry string) error {
+	if m == nil || m.mode == "fake" {
+		return fmt.Errorf("podman not installed")
+	}
+	registry = strings.TrimSpace(registry)
+	if registry == "" {
+		return fmt.Errorf("registry is required")
+	}
+
+	logoutCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(logoutCtx, "podman", "logout", registry)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(out))
+		if text != "" {
+			return fmt.Errorf("podman logout failed: %s", text)
+		}
+		return fmt.Errorf("podman logout failed: %w", err)
+	}
+	return nil
 }
 
 func listContainers(ctx context.Context) ([]viewdata.PodmanContainer, error) {

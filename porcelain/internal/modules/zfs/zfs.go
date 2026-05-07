@@ -213,3 +213,158 @@ func parseZFSBytes(s string) int64 {
 		return int64(val)
 	}
 }
+
+// CreatePool creates a zpool with optional RAID topology and compression.
+func (m *Module) CreatePool(ctx context.Context, name, raid, compression string, devices []string) error {
+	if m == nil || m.mode == "fake" {
+		return fmt.Errorf("zpool not installed")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("pool name is required")
+	}
+	if len(devices) == 0 {
+		return fmt.Errorf("at least one device is required")
+	}
+
+	args := []string{"create", name}
+	raid = strings.TrimSpace(strings.ToLower(raid))
+	if raid != "" {
+		args = append(args, raid)
+	}
+	for _, dev := range devices {
+		dev = strings.TrimSpace(dev)
+		if dev != "" {
+			args = append(args, dev)
+		}
+	}
+
+	createCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(createCtx, "zpool", args...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("zpool create failed: %s", strings.TrimSpace(string(out)))
+	}
+
+	compression = strings.TrimSpace(strings.ToLower(compression))
+	if compression == "" {
+		compression = "on"
+	}
+	setCtx, setCancel := context.WithTimeout(ctx, 15*time.Second)
+	defer setCancel()
+	setOut, setErr := exec.CommandContext(setCtx, "zfs", "set", "compression="+compression, name).CombinedOutput()
+	if setErr != nil {
+		return fmt.Errorf("pool created but compression set failed: %s", strings.TrimSpace(string(setOut)))
+	}
+	return nil
+}
+
+// DestroyPool destroys an existing zpool.
+func (m *Module) DestroyPool(ctx context.Context, name string) error {
+	if m == nil || m.mode == "fake" {
+		return fmt.Errorf("zpool not installed")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("pool name is required")
+	}
+
+	destroyCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(destroyCtx, "zpool", "destroy", name).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("zpool destroy failed: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// StartScrub starts a scrub on a pool.
+func (m *Module) StartScrub(ctx context.Context, name string) error {
+	if m == nil || m.mode == "fake" {
+		return fmt.Errorf("zpool not installed")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("pool name is required")
+	}
+	scrubCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(scrubCtx, "zpool", "scrub", name).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("zpool scrub failed: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// StopScrub aborts an in-progress scrub.
+func (m *Module) StopScrub(ctx context.Context, name string) error {
+	if m == nil || m.mode == "fake" {
+		return fmt.Errorf("zpool not installed")
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("pool name is required")
+	}
+	scrubCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(scrubCtx, "zpool", "scrub", "-s", name).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("zpool scrub stop failed: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// CreateSnapshot creates a timestamped dataset snapshot.
+func (m *Module) CreateSnapshot(ctx context.Context, dataset, snapshotName string) error {
+	if m == nil || m.mode == "fake" {
+		return fmt.Errorf("zpool not installed")
+	}
+	dataset = strings.TrimSpace(dataset)
+	if dataset == "" {
+		return fmt.Errorf("dataset is required")
+	}
+	snapshotName = strings.TrimSpace(snapshotName)
+	if snapshotName == "" {
+		snapshotName = time.Now().UTC().Format("20060102-150405")
+	}
+	target := dataset + "@" + snapshotName
+
+	snapCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(snapCtx, "zfs", "snapshot", target).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("zfs snapshot failed: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// RecentEvents returns up to limit recent zpool event lines.
+func (m *Module) RecentEvents(ctx context.Context, limit int) ([]string, error) {
+	if m == nil || m.mode == "fake" {
+		return nil, fmt.Errorf("zpool not installed")
+	}
+	if limit <= 0 {
+		limit = 40
+	}
+
+	eventsCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(eventsCtx, "zpool", "events", "-v").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("zpool events failed: %s", strings.TrimSpace(string(out)))
+	}
+
+	lines := strings.Split(string(out), "\n")
+	clean := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		clean = append(clean, line)
+	}
+	if len(clean) > limit {
+		clean = clean[len(clean)-limit:]
+	}
+	return clean, nil
+}

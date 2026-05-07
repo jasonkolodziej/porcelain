@@ -1,5 +1,23 @@
 {{ define "content" }}
-<div class="space-y-6">
+<div class="space-y-6" x-data="{ logsOpen: false, logsTunnel: '' }">
+    <div x-show="logsOpen"
+         x-transition
+         class="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+         @click.self="logsOpen = false"
+         @keydown.escape.window="logsOpen = false">
+        <div class="w-full sm:max-w-3xl rounded-none sm:rounded-2xl border shadow-2xl flex flex-col"
+             :class="darkMode ? 'bg-porcelain-950 border-porcelain-800' : 'bg-gray-950 border-porcelain-300'"
+             style="max-height: 75vh">
+            <div class="flex items-center justify-between px-5 py-3 border-b"
+                 :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-700'">
+                <p class="text-sm font-mono text-porcelain-200" x-text="logsTunnel ? 'cloudflared-' + logsTunnel : 'cloudflared logs'"></p>
+                <button @click="logsOpen = false" class="text-xs px-2 py-1 rounded-md text-porcelain-400 hover:text-porcelain-200 hover:bg-porcelain-800 transition-colors">Close</button>
+            </div>
+            <div id="cloudflare-log-output" class="overflow-y-auto flex-1 p-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-porcelain-300 bg-gray-950">
+                <p class="text-porcelain-500">Select a tunnel to view cloudflared container logs.</p>
+            </div>
+        </div>
+    </div>
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -30,6 +48,24 @@
         </span>
         {{ end }}
     </div>
+
+    <section class="rounded-2xl border p-4"
+             :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <h2 class="text-lg font-semibold mb-3" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">Credential-backed Provisioning</h2>
+        <form class="grid grid-cols-1 md:grid-cols-2 gap-3"
+              hx-post="/api/cloudflare/provision"
+              hx-swap="none"
+              @htmx:afterRequest="$dispatch('toast', { message: 'Cloudflare tunnel provisioning submitted', type: 'success' })">
+            <input class="porcelain-input" name="name" placeholder="tunnel name" required>
+            <input class="porcelain-input" name="hostname" placeholder="app.example.com" required>
+            <input class="porcelain-input md:col-span-2" name="token" placeholder="Cloudflare tunnel token" required>
+            <input class="porcelain-input" name="serviceURL" placeholder="http://host.containers.internal:8080">
+            <input class="porcelain-input" name="image" placeholder="docker.io/cloudflare/cloudflared:latest">
+            <div class="md:col-span-2">
+                <button class="btn btn-primary" type="submit">Provision Container Tunnel</button>
+            </div>
+        </form>
+    </section>
 
     <!-- Tunnels table -->
     <div class="rounded-2xl border"
@@ -71,12 +107,27 @@
                        :class="darkMode ? 'text-porcelain-600' : 'text-porcelain-400'">Created {{ .CreatedAt }}</p>
                     {{ end }}
                 </div>
-                <span class="ml-4 flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium
-                    {{ if eq .Status "active" }}badge-success
-                    {{ else if eq .Status "inactive" }}badge-warning
-                    {{ else }}badge-neutral{{ end }}">
-                    {{ .Status }}
-                </span>
+                <div class="ml-4 flex items-center gap-2">
+                    <span class="flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium
+                        {{ if eq .Status "active" }}badge-success
+                        {{ else if eq .Status "inactive" }}badge-warning
+                        {{ else }}badge-neutral{{ end }}">
+                        {{ .Status }}
+                    </span>
+                    <button class="btn btn-secondary btn-sm"
+                            @click="logsTunnel = '{{ .Name }}'; logsOpen = true"
+                            hx-get="/api/cloudflare/tunnels/{{ .Name }}/logs?tail=160"
+                            hx-target="#cloudflare-log-output"
+                            hx-swap="innerHTML">
+                        Logs
+                    </button>
+                    <button class="btn btn-secondary btn-sm"
+                            hx-post="/api/cloudflare/tunnels/{{ .Name }}/restart"
+                            hx-swap="none"
+                            @htmx:afterRequest="$dispatch('toast', { message: 'Restart requested for {{ .Name }}', type: 'info' })">
+                        Restart
+                    </button>
+                </div>
             </div>
             {{ end }}
         </div>

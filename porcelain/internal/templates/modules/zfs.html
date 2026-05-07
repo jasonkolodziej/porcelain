@@ -25,6 +25,24 @@
         <p class="text-sm" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">{{ .Data.Detail }}</p>
     </div>
 
+    <section class="rounded-2xl border p-4 space-y-3"
+             :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <div class="flex items-center justify-between">
+            <h2 class="text-sm font-semibold uppercase tracking-wide" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">ZFS Events</h2>
+            <button class="btn btn-secondary btn-sm"
+                    hx-get="/api/zfs/events?limit=60"
+                    hx-target="#zfs-events-output"
+                    hx-swap="innerHTML">
+                Refresh
+            </button>
+        </div>
+        <div id="zfs-events-output"
+             class="min-h-24 rounded-lg border p-3 font-mono text-xs whitespace-pre-wrap"
+             :class="darkMode ? 'border-porcelain-800 text-porcelain-300 bg-porcelain-950/60' : 'border-porcelain-200 text-porcelain-700 bg-porcelain-50'">
+            Recent zpool events will appear here.
+        </div>
+    </section>
+
     {{ if eq (len .Data.Pools) 0 }}
     <!-- No-pools placeholder -->
     <div class="rounded-2xl border p-6 text-center"
@@ -66,6 +84,24 @@
                         {{ if eq .Health "ONLINE" }}badge-success{{ else if eq .Health "DEGRADED" }}badge-warning{{ else }}badge-error{{ end }}">
                         {{ .Health }}
                     </span>
+                    <button class="btn btn-secondary btn-sm"
+                            hx-post="/api/zfs/pools/{{ .Name }}/scrub"
+                            hx-swap="none"
+                            @htmx:afterRequest="$dispatch('toast', { message: 'Scrub started for {{ .Name }}', type: 'info' })">
+                        Scrub
+                    </button>
+                    <button class="btn btn-secondary btn-sm"
+                            hx-post="/api/zfs/pools/{{ .Name }}/scrub/stop"
+                            hx-swap="none"
+                            @htmx:afterRequest="$dispatch('toast', { message: 'Scrub stop requested for {{ .Name }}', type: 'warning' })">
+                        Stop
+                    </button>
+                    <button class="btn btn-secondary btn-sm"
+                            hx-post="/api/zfs/pools/{{ .Name }}/snapshot"
+                            hx-swap="none"
+                            @htmx:afterRequest="$dispatch('toast', { message: 'Snapshot created for {{ .Name }}', type: 'success' })">
+                        Snapshot
+                    </button>
                 </div>
             </div>
 

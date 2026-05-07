@@ -89,6 +89,10 @@ func registerAPIRoutes(app *fiber.App, registry *modules.Registry, authorizer po
 	registerSystemdAPI(app, registry, authorizer)
 	registerNetworkAPI(app, registry, authorizer)
 	registerFirewallAPI(app, registry, authorizer)
+	registerStorageAPI(app, registry, authorizer)
+	registerZFSAPI(app, registry, authorizer)
+	registerCloudflareAPI(app, registry, authorizer)
+	registerSensorsAPI(app, registry, authorizer)
 }
 
 func registerDiagnosticsBundleAPI(app *fiber.App, registry *modules.Registry) {
@@ -153,6 +157,525 @@ func registerPodmanAPI(app *fiber.App, registry *modules.Registry, authorizer po
 		}
 		c.Type("html")
 		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(logs) + "</pre>")
+	})
+
+	app.Get("/api/podman/containers/:id/inspect", func(c fiber.Ctx) error {
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("podman")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("podman module not registered")
+		}
+		pm, isPodman := m.(*podman.Module)
+		if !isPodman {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid podman module type")
+		}
+		body, err := pm.InspectContainer(c.Context(), c.Params("id"))
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		c.Type("html")
+		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(body) + "</pre>")
+	})
+
+	app.Get("/api/podman/images/:ref/inspect", func(c fiber.Ctx) error {
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("podman")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("podman module not registered")
+		}
+		pm, isPodman := m.(*podman.Module)
+		if !isPodman {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid podman module type")
+		}
+		body, err := pm.InspectImage(c.Context(), c.Params("ref"))
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		c.Type("html")
+		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(body) + "</pre>")
+	})
+
+	app.Post("/api/podman/images/pull", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "podman.image.pull", "global"); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("podman")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("podman module not registered")
+		}
+		pm, isPodman := m.(*podman.Module)
+		if !isPodman {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid podman module type")
+		}
+		image := strings.TrimSpace(c.FormValue("image"))
+		out, err := pm.PullImage(c.Context(), image)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		c.Type("html")
+		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(out) + "</pre>")
+	})
+
+	app.Post("/api/podman/images/build", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "podman.image.build", "global"); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("podman")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("podman module not registered")
+		}
+		pm, isPodman := m.(*podman.Module)
+		if !isPodman {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid podman module type")
+		}
+		out, err := pm.BuildImage(
+			c.Context(),
+			strings.TrimSpace(c.FormValue("contextPath")),
+			strings.TrimSpace(c.FormValue("dockerfile")),
+			strings.TrimSpace(c.FormValue("tag")),
+		)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		c.Type("html")
+		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(out) + "</pre>")
+	})
+
+	app.Post("/api/podman/containers/:id/exec", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "podman.container.exec", c.Params("id")); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("podman")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("podman module not registered")
+		}
+		pm, isPodman := m.(*podman.Module)
+		if !isPodman {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid podman module type")
+		}
+		cmdLine := strings.TrimSpace(c.FormValue("command"))
+		parts := strings.Fields(cmdLine)
+		out, err := pm.Exec(c.Context(), c.Params("id"), parts)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		c.Type("html")
+		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(out) + "</pre>")
+	})
+
+	app.Post("/api/podman/registry/login", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "podman.registry.login", "global"); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("podman")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("podman module not registered")
+		}
+		pm, isPodman := m.(*podman.Module)
+		if !isPodman {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid podman module type")
+		}
+		err := pm.RegistryLogin(c.Context(), c.FormValue("registry"), c.FormValue("username"), c.FormValue("password"))
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+
+	app.Post("/api/podman/registry/logout", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "podman.registry.logout", "global"); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("podman")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("podman module not registered")
+		}
+		pm, isPodman := m.(*podman.Module)
+		if !isPodman {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid podman module type")
+		}
+		err := pm.RegistryLogout(c.Context(), c.FormValue("registry"))
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+}
+
+func registerStorageAPI(app *fiber.App, registry *modules.Registry, authorizer policy.Authorizer) {
+	app.Post("/api/storage/devices/format", func(c fiber.Ctx) error {
+		device := strings.TrimSpace(c.FormValue("device"))
+		if err := authorizeWrite(c, authorizer, "storage.device.format", device); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("storage")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("storage module not registered")
+		}
+		sm, isStorage := m.(*storage.Module)
+		if !isStorage {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid storage module type")
+		}
+		if !strings.HasPrefix(device, "/") {
+			device = "/" + device
+		}
+		if err := sm.FormatDevice(c.Context(), device, c.FormValue("fsType")); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+
+	app.Post("/api/storage/devices/unlock", func(c fiber.Ctx) error {
+		device := strings.TrimSpace(c.FormValue("device"))
+		if err := authorizeWrite(c, authorizer, "storage.device.unlock", device); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("storage")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("storage module not registered")
+		}
+		sm, isStorage := m.(*storage.Module)
+		if !isStorage {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid storage module type")
+		}
+		if !strings.HasPrefix(device, "/") {
+			device = "/" + device
+		}
+		if err := sm.UnlockDevice(c.Context(), device); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+}
+
+func registerZFSAPI(app *fiber.App, registry *modules.Registry, authorizer policy.Authorizer) {
+	app.Post("/api/zfs/pools", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "zfs.pool.create", "global"); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("zfs")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("zfs module not registered")
+		}
+		zm, isZFS := m.(*zfs.Module)
+		if !isZFS {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid zfs module type")
+		}
+		var devices []string
+		if mf, err := c.MultipartForm(); err == nil && mf != nil {
+			devices = append(devices, mf.Value["devices"]...)
+		}
+		if err := zm.CreatePool(c.Context(), c.FormValue("name"), c.FormValue("raid"), c.FormValue("compression"), devices); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+
+	app.Post("/api/zfs/pools/:name/scrub", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "zfs.pool.scrub", c.Params("name")); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("zfs")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("zfs module not registered")
+		}
+		zm, isZFS := m.(*zfs.Module)
+		if !isZFS {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid zfs module type")
+		}
+		if err := zm.StartScrub(c.Context(), c.Params("name")); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+
+	app.Post("/api/zfs/pools/:name/scrub/stop", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "zfs.pool.scrub.stop", c.Params("name")); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("zfs")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("zfs module not registered")
+		}
+		zm, isZFS := m.(*zfs.Module)
+		if !isZFS {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid zfs module type")
+		}
+		if err := zm.StopScrub(c.Context(), c.Params("name")); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+
+	app.Post("/api/zfs/pools/:name/snapshot", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "zfs.pool.snapshot", c.Params("name")); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("zfs")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("zfs module not registered")
+		}
+		zm, isZFS := m.(*zfs.Module)
+		if !isZFS {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid zfs module type")
+		}
+		if err := zm.CreateSnapshot(c.Context(), c.Params("name"), c.FormValue("snapshotName")); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+
+	app.Delete("/api/zfs/pools/:name", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "zfs.pool.destroy", c.Params("name")); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("zfs")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("zfs module not registered")
+		}
+		zm, isZFS := m.(*zfs.Module)
+		if !isZFS {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid zfs module type")
+		}
+		if err := zm.DestroyPool(c.Context(), c.Params("name")); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+
+	app.Get("/api/zfs/events", func(c fiber.Ctx) error {
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("zfs")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("zfs module not registered")
+		}
+		zm, isZFS := m.(*zfs.Module)
+		if !isZFS {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid zfs module type")
+		}
+		limit := 40
+		if raw := c.Query("limit"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 200 {
+				limit = n
+			}
+		}
+		lines, err := zm.RecentEvents(c.Context(), limit)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		c.Type("html")
+		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(strings.Join(lines, "\n")) + "</pre>")
+	})
+}
+
+func registerCloudflareAPI(app *fiber.App, registry *modules.Registry, authorizer policy.Authorizer) {
+	app.Post("/api/cloudflare/provision", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "cloudflare.tunnel.provision", "global"); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("cloudflare")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("cloudflare module not registered")
+		}
+		cm, isCloudflare := m.(*cloudflare.Module)
+		if !isCloudflare {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid cloudflare module type")
+		}
+		err := cm.ProvisionWithToken(
+			c.Context(),
+			c.FormValue("name"),
+			c.FormValue("token"),
+			c.FormValue("hostname"),
+			c.FormValue("serviceURL"),
+			c.FormValue("image"),
+		)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+
+	app.Get("/api/cloudflare/tunnels/:name/logs", func(c fiber.Ctx) error {
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("cloudflare")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("cloudflare module not registered")
+		}
+		cm, isCloudflare := m.(*cloudflare.Module)
+		if !isCloudflare {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid cloudflare module type")
+		}
+		tail := 120
+		if raw := c.Query("tail"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 5000 {
+				tail = n
+			}
+		}
+		logs, err := cm.TunnelContainerLogs(c.Context(), c.Params("name"), tail)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		c.Type("html")
+		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(logs) + "</pre>")
+	})
+
+	app.Post("/api/cloudflare/tunnels/:name/restart", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "cloudflare.tunnel.restart", c.Params("name")); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("cloudflare")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("cloudflare module not registered")
+		}
+		cm, isCloudflare := m.(*cloudflare.Module)
+		if !isCloudflare {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid cloudflare module type")
+		}
+		if err := cm.RestartTunnelContainer(c.Context(), c.Params("name")); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+}
+
+func registerSensorsAPI(app *fiber.App, registry *modules.Registry, authorizer policy.Authorizer) {
+	app.Post("/api/sensors/thresholds", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "sensors.threshold.set", "global"); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("sensors")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("sensors module not registered")
+		}
+		sm, isSensors := m.(*sensors.Module)
+		if !isSensors {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid sensors module type")
+		}
+		if err := sm.SetThreshold(c.FormValue("chip"), c.FormValue("reading"), c.FormValue("threshold")); err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+
+	app.Delete("/api/sensors/thresholds", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "sensors.threshold.clear", "global"); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("sensors")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("sensors module not registered")
+		}
+		sm, isSensors := m.(*sensors.Module)
+		if !isSensors {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid sensors module type")
+		}
+		sm.ClearThreshold(c.Query("chip"), c.Query("reading"))
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+
+	app.Post("/api/sensors/thresholds/clear", func(c fiber.Ctx) error {
+		if err := authorizeWrite(c, authorizer, "sensors.threshold.clear", "global"); err != nil {
+			return err
+		}
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("sensors")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("sensors module not registered")
+		}
+		sm, isSensors := m.(*sensors.Module)
+		if !isSensors {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid sensors module type")
+		}
+		sm.ClearThreshold(c.FormValue("chip"), c.FormValue("reading"))
+		return c.JSON(map[string]string{"status": "ok"})
+	})
+
+	app.Get("/api/sensors/history", func(c fiber.Ctx) error {
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("sensors")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("sensors module not registered")
+		}
+		sm, isSensors := m.(*sensors.Module)
+		if !isSensors {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid sensors module type")
+		}
+		limit := 30
+		if raw := c.Query("limit"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 240 {
+				limit = n
+			}
+		}
+		points := sm.History(c.Query("chip"), c.Query("reading"), limit)
+		if len(points) == 0 {
+			return c.SendString("No history captured yet for this reading.")
+		}
+		lines := make([]string, 0, len(points))
+		for _, p := range points {
+			lines = append(lines, p.Timestamp+"  "+fmt.Sprintf("%.2f", p.Value))
+		}
+		c.Type("html")
+		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(strings.Join(lines, "\n")) + "</pre>")
 	})
 }
 
@@ -629,6 +1152,8 @@ func populateDiagnosticsSnapshot(ctx context.Context, data *viewdata.Diagnostics
 			Active:      svc.Active,
 		})
 	}
+	data.JournalTail = append([]string(nil), snap.JournalTail...)
+	data.OSTreeStatus = snap.OSTreeStatus
 }
 
 func appendModuleStatuses(ctx context.Context, registry *modules.Registry, data *viewdata.DiagnosticsPageData) {
@@ -696,6 +1221,8 @@ func diagnosticsBundle(ctx context.Context, registry *modules.Registry) ([]byte,
 		"running_services":   page.RunningServices,
 		"total_services":     page.TotalServices,
 		"services":           page.Services,
+		"journal_tail":       page.JournalTail,
+		"rpm_ostree_status":  page.OSTreeStatus,
 		"module_status_list": page.Modules,
 	}
 

@@ -389,6 +389,9 @@ Route Handler:
 - UDisks2-backed storage workflows for local partitions, encryption, RAID, NFS, and iSCSI
   - **done:** read-only block-device snapshot via UDisks2 with a developer
     fake backend on non-Linux hosts so the storage page renders in macOS dev.
+  - **done (integration wave):** storage write actions are now wired through
+    API routes for format and unlock operations (`/api/storage/devices/format`,
+    `/api/storage/devices/unlock`) with policy-gated authorization.
   - **deferred:** partition creation, LUKS unlock, RAID assembly, NFS, iSCSI
     write operations (awaiting Phase 4 storage write action expansion).
 
@@ -416,7 +419,10 @@ Route Handler:
 
 - diagnostics collection and system health surfaces
   - **done:** hostname / uptime / running services derived from systemd.
-  - **deferred:** journal capture, rpm-ostree state, bundle export.
+  - **done (integration wave):** diagnostics page and support bundle now
+    include `journalctl` tail and `rpm-ostree status` summary capture.
+  - **deferred:** deep journal filtering/search and richer ostree deployment
+    diff views.
 
 ### Phase 4 — Workload and Edge Integrations
 
@@ -427,26 +433,39 @@ Route Handler:
     `/api/podman/containers/:id/:action`.
   - **done:** `/api/podman/containers/:id/logs` powers an HTMX log drawer for
     container log tails directly from the containers page.
-  - **deferred:** image pull/build, exec/inspect views, Quadlet authoring,
-    and image registry management.
+  - **done (integration wave):** image pull/build, container/image inspect,
+    lightweight exec, and registry login/logout are now exposed via backend
+    APIs and integrated into the `/podman` frontend workbench.
+  - **deferred:** Quadlet authoring workflows and full registry catalog/search
+    management.
 - ZFS orchestration and event surfaces
   - **done (initial slice):** `zfs` module probe and dedicated `/storage/zfs`
     page wiring.
   - **done:** `/storage/zfs` now renders live pool health, capacity, scrub
     status, and dataset usage when ZFS is available.
-  - **deferred:** pool operations, scrub orchestration, and event streaming.
+  - **done (integration wave):** pool create/destroy, scrub start/stop,
+    snapshot trigger, and recent event capture are now wired via API routes
+    and surfaced in Storage/ZFS frontend controls.
+  - **deferred:** true streaming event subscriptions and long-running task
+    progress channels.
 - lm-sensors inventory and telemetry views
   - **done (phase 2 slice):** `sensors` module now parses `sensors -j`
     telemetry when available, rendering per-chip readings, high/critical values,
     and critical highlighting in the dedicated `/sensors` UI.
-  - **deferred:** charting history over time and configurable alert thresholds.
+  - **done (integration wave):** configurable in-memory alert thresholds and
+    per-reading history sampling are now available with frontend controls.
+  - **deferred:** persisted time-series storage and chart visualizations beyond
+    text-based history views.
 - Cloudflare tunnel management with encrypted credential handling
   - **done (initial slice):** `cloudflare` module probe and dedicated
     `/network/cloudflare` UI route.
   - **done:** `/network/cloudflare` now renders the live tunnel inventory and
     `cloudflared` version when local credentials are available.
-  - **deferred:** tunnel lifecycle, ingress editing, and credential-backed
-    tunnel provisioning.
+  - **done (integration wave):** credential-backed provisioning now supports
+    token-driven cloudflared Podman container startup, restart, and log output
+    retrieval from the Cloudflare page.
+  - **deferred:** full ingress rule editing UX and multi-tunnel credential
+    secret lifecycle management.
 
 ### Phase 5 — External Secret and PKI Backends
 

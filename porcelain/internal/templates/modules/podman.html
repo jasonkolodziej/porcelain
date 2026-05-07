@@ -58,6 +58,57 @@
         <p class="text-sm" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">{{ .Data.Detail }}</p>
     </div>
 
+    <section class="rounded-2xl border p-4 space-y-4"
+             :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            <form class="space-y-2"
+                  hx-post="/api/podman/images/pull"
+                  hx-target="#podman-workbench-output"
+                  hx-swap="innerHTML">
+                <p class="text-xs font-semibold uppercase tracking-wide" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Image Pull</p>
+                <input class="porcelain-input" name="image" placeholder="docker.io/library/nginx:latest" required>
+                <button class="btn btn-secondary btn-sm" type="submit">Pull</button>
+            </form>
+
+            <form class="space-y-2"
+                  hx-post="/api/podman/images/build"
+                  hx-target="#podman-workbench-output"
+                  hx-swap="innerHTML">
+                <p class="text-xs font-semibold uppercase tracking-wide" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Image Build</p>
+                <input class="porcelain-input" name="contextPath" placeholder="/path/to/context" required>
+                <input class="porcelain-input" name="dockerfile" placeholder="Dockerfile (optional)">
+                <input class="porcelain-input" name="tag" placeholder="ghcr.io/org/app:dev">
+                <button class="btn btn-secondary btn-sm" type="submit">Build</button>
+            </form>
+
+            <form class="space-y-2"
+                  hx-post="/api/podman/registry/login"
+                  hx-swap="none"
+                  @htmx:afterRequest="$dispatch('toast', { message: 'Registry login submitted', type: 'success' })">
+                <p class="text-xs font-semibold uppercase tracking-wide" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Registry Auth</p>
+                <input class="porcelain-input" name="registry" placeholder="ghcr.io" required>
+                <input class="porcelain-input" name="username" placeholder="username" required>
+                <input class="porcelain-input" type="password" name="password" placeholder="password" required>
+                <div class="flex gap-2">
+                    <button class="btn btn-secondary btn-sm" type="submit">Login</button>
+                    <button class="btn btn-secondary btn-sm" type="button"
+                            hx-post="/api/podman/registry/logout"
+                            hx-include="closest form"
+                            hx-swap="none"
+                            @htmx:afterRequest="$dispatch('toast', { message: 'Registry logout submitted', type: 'info' })">
+                        Logout
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div id="podman-workbench-output"
+             class="min-h-24 rounded-lg border p-3 font-mono text-xs whitespace-pre-wrap"
+             :class="darkMode ? 'border-porcelain-800 text-porcelain-300 bg-porcelain-950/60' : 'border-porcelain-200 text-porcelain-700 bg-porcelain-50'">
+            Podman workbench output appears here.
+        </div>
+    </section>
+
     <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
         <section class="xl:col-span-3 rounded-2xl border p-6"
                  :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
@@ -88,6 +139,19 @@
                                         hx-target="#log-output"
                                         hx-swap="innerHTML">
                                     Logs
+                                </button>
+                                <button class="btn btn-secondary btn-sm"
+                                        hx-get="/api/podman/containers/{{ .ID }}/inspect"
+                                        hx-target="#podman-workbench-output"
+                                        hx-swap="innerHTML">
+                                    Inspect
+                                </button>
+                                <button class="btn btn-secondary btn-sm"
+                                        hx-post="/api/podman/containers/{{ .ID }}/exec"
+                                        hx-vals='{"command":"/bin/sh -c env"}'
+                                        hx-target="#podman-workbench-output"
+                                        hx-swap="innerHTML">
+                                    Exec env
                                 </button>
                                 {{ if eq (lower .State) "running" }}
                                 <button class="btn btn-secondary btn-sm"
@@ -137,6 +201,14 @@
                     <p class="text-sm font-medium truncate" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-900'">{{ .Repository }}:{{ .Tag }}</p>
                     <p class="text-xs font-mono truncate" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">{{ .ID }}</p>
                     <p class="text-xs" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">{{ .Size }}</p>
+                    <div class="mt-2">
+                        <button class="btn btn-secondary btn-sm"
+                                hx-get="/api/podman/images/{{ .ID }}/inspect"
+                                hx-target="#podman-workbench-output"
+                                hx-swap="innerHTML">
+                            Inspect
+                        </button>
+                    </div>
                 </div>
                 {{ end }}
             </div>

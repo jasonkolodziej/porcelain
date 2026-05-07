@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules"
@@ -22,12 +24,27 @@ const noteNotInstalled = "lm-sensors not installed"
 type Module struct {
 	mode string
 	note string
+
+	mu         sync.Mutex
+	history    map[string][]historyPoint
+	thresholds map[string]float64
+}
+
+type historyPoint struct {
+	At    time.Time
+	Value float64
+}
+
+// ReadingHistoryPoint is a serializable snapshot point returned by History.
+type ReadingHistoryPoint struct {
+	Timestamp string  `json:"timestamp"`
+	Value     float64 `json:"value"`
 }
 
 // New returns a Module that probes lm-sensors command availability.
 func New(ctx context.Context) *Module {
 	if _, err := exec.LookPath("sensors"); err != nil {
-		return &Module{mode: "fake", note: noteNotInstalled}
+		return &Module{mode: "fake", note: noteNotInstalled, history: map[string][]historyPoint{}, thresholds: map[string]float64{}}
 	}
 
 	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -35,12 +52,12 @@ func New(ctx context.Context) *Module {
 	cmd := exec.CommandContext(probeCtx, "sensors", "-u")
 	if err := cmd.Run(); err != nil {
 		if errors.Is(probeCtx.Err(), context.DeadlineExceeded) {
-			return &Module{mode: "degraded", note: "sensors probe timed out"}
+			return &Module{mode: "degraded", note: "sensors probe timed out", history: map[string][]historyPoint{}, thresholds: map[string]float64{}}
 		}
-		return &Module{mode: "degraded", note: "sensors command failed"}
+		return &Module{mode: "degraded", note: "sensors command failed", history: map[string][]historyPoint{}, thresholds: map[string]float64{}}
 	}
 
-	return &Module{mode: "sensors"}
+	return &Module{mode: "sensors", history: map[string][]historyPoint{}, thresholds: map[string]float64{}}
 }
 
 // ID implements modules.Module.
@@ -98,9 +115,98 @@ func (m *Module) Snapshot(ctx context.Context) (viewdata.SensorsPageData, error)
 	if err != nil {
 		return data, err
 	}
+	m.applyThresholdsAndHistory(chips)
 	data.Chips = chips
 	data.Detail = fmt.Sprintf("%d chips, %d readings", len(chips), countReadings(chips))
 	return data, nil
+}
+
+// SetThreshold sets an in-memory critical threshold for chip/reading.
+func (m *Module) SetThreshold(chipName, readingName, value string) error {
+	if m == nil {
+		return fmt.Errorf("sensors module unavailable")
+	}
+	chipName = strings.TrimSpace(chipName)
+	readingName = strings.TrimSpace(readingName)
+	if chipName == "" || readingName == "" {
+		return fmt.Errorf("chip and reading are required")
+	}
+	v, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	if err != nil {
+		return fmt.Errorf("invalid threshold value: %w", err)
+	}
+	m.mu.Lock()
+	m.thresholds[historyKey(chipName, readingName)] = v
+	m.mu.Unlock()
+	return nil
+}
+
+// ClearThreshold removes an in-memory critical threshold override.
+func (m *Module) ClearThreshold(chipName, readingName string) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	delete(m.thresholds, historyKey(chipName, readingName))
+	m.mu.Unlock()
+}
+
+// History returns recent points for a chip/reading pair.
+func (m *Module) History(chipName, readingName string, limit int) []ReadingHistoryPoint {
+	if m == nil {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 30
+	}
+	m.mu.Lock()
+	points := append([]historyPoint(nil), m.history[historyKey(chipName, readingName)]...)
+	m.mu.Unlock()
+
+	if len(points) > limit {
+		points = points[len(points)-limit:]
+	}
+	out := make([]ReadingHistoryPoint, 0, len(points))
+	for _, p := range points {
+		out = append(out, ReadingHistoryPoint{Timestamp: p.At.UTC().Format(time.RFC3339), Value: p.Value})
+	}
+	return out
+}
+
+func (m *Module) applyThresholdsAndHistory(chips []viewdata.SensorChip) {
+	if m == nil {
+		return
+	}
+	now := time.Now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for cIdx := range chips {
+		chip := &chips[cIdx]
+		for rIdx := range chip.Readings {
+			reading := &chip.Readings[rIdx]
+			parsed, err := strconv.ParseFloat(reading.Value, 64)
+			if err != nil {
+				continue
+			}
+
+			key := historyKey(chip.Name, reading.Name)
+			if thr, ok := m.thresholds[key]; ok {
+				reading.Threshold = formatValue(thr)
+				reading.Critical = parsed >= thr
+			}
+
+			series := append(m.history[key], historyPoint{At: now, Value: parsed})
+			if len(series) > 240 {
+				series = series[len(series)-240:]
+			}
+			m.history[key] = series
+		}
+	}
+}
+
+func historyKey(chipName, readingName string) string {
+	return chipName + "::" + readingName
 }
 
 func readSensorsJSON(ctx context.Context) ([]viewdata.SensorChip, error) {

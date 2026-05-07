@@ -12,7 +12,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os/exec"
+	"strings"
 	"sync"
+	"time"
 
 	internaldbus "github.com/jasonkolodziej/porcelain/porcelain/internal/dbus"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/dbus/udisks2"
@@ -131,6 +134,42 @@ func (m *Module) FormatBlock(ctx context.Context, objectPath, fsType string) err
 		return fmt.Errorf("storage: udisks2 backend unavailable")
 	}
 	return b.client.FormatBlock(ctx, godbus.ObjectPath(objectPath), fsType)
+}
+
+// FormatDevice formats a block device path via udisksctl.
+func (m *Module) FormatDevice(ctx context.Context, devicePath, fsType string) error {
+	devicePath = strings.TrimSpace(devicePath)
+	if devicePath == "" {
+		return fmt.Errorf("device path is required")
+	}
+	fsType = strings.TrimSpace(strings.ToLower(fsType))
+	if fsType == "" {
+		fsType = "ext4"
+	}
+
+	cmdCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	out, err := exec.CommandContext(cmdCtx, "udisksctl", "format", "-b", devicePath, "--type", fsType).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("udisksctl format failed: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// UnlockDevice unlocks an encrypted block device using udisksctl.
+func (m *Module) UnlockDevice(ctx context.Context, devicePath string) error {
+	devicePath = strings.TrimSpace(devicePath)
+	if devicePath == "" {
+		return fmt.Errorf("device path is required")
+	}
+
+	cmdCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(cmdCtx, "udisksctl", "unlock", "-b", devicePath).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("udisksctl unlock failed: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // udisks2Backend is the real backend backed by org.freedesktop.UDisks2.

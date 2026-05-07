@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
@@ -31,6 +32,8 @@ type Snapshot struct {
 	RunningServices int
 	TotalServices   int
 	Services        []ServiceSummary
+	JournalTail     []string
+	OSTreeStatus    string
 }
 
 // ServiceSummary is a flattened systemd unit summary suitable for the
@@ -122,6 +125,8 @@ func (m *Module) Capture(ctx context.Context) (Snapshot, error) {
 		}}
 		snap.RunningServices = 1
 		snap.TotalServices = 1
+		snap.JournalTail = captureJournalTail(ctx, 20)
+		snap.OSTreeStatus = captureOSTreeStatus(ctx)
 		m.mu.Lock()
 		m.cached = snap
 		m.mu.Unlock()
@@ -150,10 +155,55 @@ func (m *Module) Capture(ctx context.Context) (Snapshot, error) {
 		})
 	}
 
+	snap.JournalTail = captureJournalTail(ctx, 20)
+	snap.OSTreeStatus = captureOSTreeStatus(ctx)
+
 	m.mu.Lock()
 	m.cached = snap
 	m.mu.Unlock()
 	return snap, nil
+}
+
+func captureJournalTail(ctx context.Context, lines int) []string {
+	if lines <= 0 {
+		lines = 20
+	}
+	cmdCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(cmdCtx, "journalctl", "-n", fmt.Sprintf("%d", lines), "--no-pager", "-o", "short").CombinedOutput()
+	if err != nil {
+		return []string{"journalctl unavailable"}
+	}
+	raw := strings.Split(strings.TrimSpace(string(out)), "\n")
+	list := make([]string, 0, len(raw))
+	for _, line := range raw {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			list = append(list, line)
+		}
+	}
+	if len(list) == 0 {
+		return []string{"no journal entries"}
+	}
+	return list
+}
+
+func captureOSTreeStatus(ctx context.Context) string {
+	cmdCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(cmdCtx, "rpm-ostree", "status").CombinedOutput()
+	if err != nil {
+		return "rpm-ostree unavailable"
+	}
+	text := strings.TrimSpace(string(out))
+	if text == "" {
+		return "rpm-ostree status empty"
+	}
+	lines := strings.Split(text, "\n")
+	if len(lines) > 6 {
+		lines = lines[:6]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // UnitAction executes a systemd unit action through the shared D-Bus client.
