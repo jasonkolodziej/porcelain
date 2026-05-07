@@ -1,0 +1,111 @@
+{{ define "content" }}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight"
+                :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                Cloudflare
+            </h1>
+            <p class="mt-1 text-sm"
+               :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+                cloudflared tunnel agent and active tunnels
+            </p>
+        </div>
+        {{ if .Data.StatusBadge }}
+        <span class="self-start text-xs px-2 py-1 rounded-full {{ .Data.StatusBadge.Class }}">
+            {{ .Data.StatusBadge.Text }}
+        </span>
+        {{ end }}
+    </div>
+
+    <!-- Status bar -->
+    <div class="rounded-2xl border p-4 flex items-center justify-between"
+         :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <p class="text-sm" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">{{ .Data.Detail }}</p>
+        {{ if .Data.Version }}
+        <span class="text-xs font-mono px-2 py-0.5 rounded-md"
+              :class="darkMode ? 'bg-porcelain-800 text-porcelain-400' : 'bg-porcelain-100 text-porcelain-600'">
+            v{{ .Data.Version }}
+        </span>
+        {{ end }}
+    </div>
+
+    <!-- Tunnels table -->
+    <div class="rounded-2xl border"
+         :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <div class="flex items-center justify-between px-6 py-4 border-b"
+             :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+            <h2 class="text-lg font-semibold"
+                :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">Tunnels</h2>
+            <span class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">
+                {{ len .Data.Tunnels }} registered
+            </span>
+        </div>
+
+        {{ if eq (len .Data.Tunnels) 0 }}
+        <div class="px-6 py-8 text-center">
+            <svg class="mx-auto w-9 h-9 mb-3" :class="darkMode ? 'text-porcelain-600' : 'text-porcelain-300'"
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75"/>
+            </svg>
+            <p class="text-sm" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">
+                No tunnels registered.
+            </p>
+            <p class="mt-1 text-xs" :class="darkMode ? 'text-porcelain-600' : 'text-porcelain-400'">
+                Run <code class="font-mono">cloudflared tunnel create &lt;name&gt;</code> to create one.
+            </p>
+        </div>
+        {{ else }}
+        <div class="divide-y" :class="darkMode ? 'divide-porcelain-800' : 'divide-porcelain-100'">
+            {{ range .Data.Tunnels }}
+            <div class="flex items-center justify-between px-6 py-4">
+                <div class="min-w-0">
+                    <p class="text-sm font-medium truncate"
+                       :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-900'">{{ .Name }}</p>
+                    <p class="text-xs font-mono truncate mt-0.5"
+                       :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">{{ .ID }}</p>
+                    {{ if .CreatedAt }}
+                    <p class="text-xs mt-0.5"
+                       :class="darkMode ? 'text-porcelain-600' : 'text-porcelain-400'">Created {{ .CreatedAt }}</p>
+                    {{ end }}
+                </div>
+                <span class="ml-4 flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium
+                    {{ if eq .Status "active" }}badge-success
+                    {{ else if eq .Status "inactive" }}badge-warning
+                    {{ else }}badge-neutral{{ end }}">
+                    {{ .Status }}
+                </span>
+            </div>
+            {{ end }}
+        </div>
+        {{ end }}
+    </div>
+
+    <!-- Quick help -->
+    <div class="rounded-2xl border px-6 py-5"
+         :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <h3 class="text-sm font-semibold mb-3"
+            :class="darkMode ? 'text-porcelain-300' : 'text-porcelain-700'">Quick reference</h3>
+        <dl class="space-y-2">
+            <dd class="text-xs font-mono px-3 py-1.5 rounded-lg"
+                :class="darkMode ? 'bg-porcelain-800 text-porcelain-300' : 'bg-porcelain-50 text-porcelain-700'">
+                cloudflared tunnel create &lt;name&gt;
+            </dd>
+            <dd class="text-xs font-mono px-3 py-1.5 rounded-lg"
+                :class="darkMode ? 'bg-porcelain-800 text-porcelain-300' : 'bg-porcelain-50 text-porcelain-700'">
+                cloudflared tunnel route dns &lt;tunnel&gt; &lt;hostname&gt;
+            </dd>
+            <dd class="text-xs font-mono px-3 py-1.5 rounded-lg"
+                :class="darkMode ? 'bg-porcelain-800 text-porcelain-300' : 'bg-porcelain-50 text-porcelain-700'">
+                cloudflared tunnel run &lt;name&gt;
+            </dd>
+            <dd class="text-xs font-mono px-3 py-1.5 rounded-lg"
+                :class="darkMode ? 'bg-porcelain-800 text-porcelain-300' : 'bg-porcelain-50 text-porcelain-700'">
+                cloudflared tunnel delete &lt;name&gt;
+            </dd>
+        </dl>
+    </div>
+</div>
+{{ end }}

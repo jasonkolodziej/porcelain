@@ -134,6 +134,34 @@ func (m *Module) ContainerAction(ctx context.Context, containerID, action string
 	return nil
 }
 
+// ContainerLogs returns the last tail lines from the named container. tail=0
+// defaults to 100. The output is plain text (no ANSI sequences).
+func (m *Module) ContainerLogs(ctx context.Context, containerID string, tail int) (string, error) {
+	if m == nil || m.mode == "fake" {
+		return "", fmt.Errorf("podman not installed")
+	}
+	containerID = strings.TrimSpace(containerID)
+	if containerID == "" {
+		return "", fmt.Errorf("container id/name is required")
+	}
+	if tail <= 0 {
+		tail = 100
+	}
+
+	logCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(logCtx, "podman", "logs", "--tail", fmt.Sprintf("%d", tail), containerID)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		text := strings.TrimSpace(string(out))
+		if text != "" {
+			return "", fmt.Errorf("podman logs failed: %s", text)
+		}
+		return "", fmt.Errorf("podman logs failed: %w", err)
+	}
+	return string(out), nil
+}
+
 func listContainers(ctx context.Context) ([]viewdata.PodmanContainer, error) {
 	cmdCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

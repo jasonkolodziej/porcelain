@@ -102,7 +102,10 @@ porcelain/
 │       ├── base.html               # Shared layout
 │       ├── dashboard.html          # Home dashboard
 │       ├── modules/
-│       │   └── storage.html        # Placeholder module partial
+│       │   ├── cloudflare.html     # Cloudflare tunnel inventory page
+│       │   ├── podman.html         # Podman containers, images, and logs drawer
+│       │   ├── storage.html        # Storage landing page
+│       │   └── zfs.html            # ZFS pool and dataset status page
 │       └── templates.go            # Embedded template loader
 ├── pkg/
 │   ├── api/
@@ -422,11 +425,15 @@ Route Handler:
     exposes a dedicated `/podman` UI surface, lists containers/images, and
     supports safe `start/stop/restart` actions through
     `/api/podman/containers/:id/:action`.
-  - **deferred:** image pull/build, logs/exec/inspect views, Quadlet authoring,
+  - **done:** `/api/podman/containers/:id/logs` powers an HTMX log drawer for
+    container log tails directly from the containers page.
+  - **deferred:** image pull/build, exec/inspect views, Quadlet authoring,
     and image registry management.
 - ZFS orchestration and event surfaces
   - **done (initial slice):** `zfs` module probe and dedicated `/storage/zfs`
     page wiring.
+  - **done:** `/storage/zfs` now renders live pool health, capacity, scrub
+    status, and dataset usage when ZFS is available.
   - **deferred:** pool operations, scrub orchestration, and event streaming.
 - lm-sensors inventory and telemetry views
   - **done (phase 2 slice):** `sensors` module now parses `sensors -j`
@@ -436,6 +443,8 @@ Route Handler:
 - Cloudflare tunnel management with encrypted credential handling
   - **done (initial slice):** `cloudflare` module probe and dedicated
     `/network/cloudflare` UI route.
+  - **done:** `/network/cloudflare` now renders the live tunnel inventory and
+    `cloudflared` version when local credentials are available.
   - **deferred:** tunnel lifecycle, ingress editing, and credential-backed
     tunnel provisioning.
 

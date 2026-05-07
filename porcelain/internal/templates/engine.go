@@ -32,10 +32,10 @@ type pageEntry struct {
 var pages = []pageEntry{
 	{name: "dashboard", file: "dashboard.html"},
 	{name: "storage", file: "modules/storage.html"},
-	{name: "storage-zfs", file: placeholderTemplate},
+	{name: "storage-zfs", file: "modules/zfs.html"},
 	{name: "network", file: "modules/network.html"},
 	{name: "network-firewall", file: "modules/firewall.html"},
-	{name: "network-cloudflare", file: placeholderTemplate},
+	{name: "network-cloudflare", file: "modules/cloudflare.html"},
 	{name: "podman", file: "modules/podman.html"},
 	{name: "diagnostics", file: "modules/diagnostics.html"},
 	{name: "sensors", file: "modules/sensors.html"},

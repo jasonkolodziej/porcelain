@@ -1,0 +1,157 @@
+{{ define "content" }}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight"
+                :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                ZFS
+            </h1>
+            <p class="mt-1 text-sm"
+               :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+                Pool health, dataset usage, and scrub status
+            </p>
+        </div>
+        {{ if .Data.StatusBadge }}
+        <span class="self-start text-xs px-2 py-1 rounded-full {{ .Data.StatusBadge.Class }}">
+            {{ .Data.StatusBadge.Text }}
+        </span>
+        {{ end }}
+    </div>
+
+    <!-- Summary / status bar -->
+    <div class="rounded-2xl border p-4"
+         :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <p class="text-sm" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">{{ .Data.Detail }}</p>
+    </div>
+
+    {{ if eq (len .Data.Pools) 0 }}
+    <!-- No-pools placeholder -->
+    <div class="rounded-2xl border p-6 text-center"
+         :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <svg class="mx-auto w-10 h-10 mb-3" :class="darkMode ? 'text-porcelain-600' : 'text-porcelain-400'"
+             fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375"/>
+        </svg>
+        <p class="text-sm font-medium" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+            No ZFS pools found
+        </p>
+        <p class="mt-1 text-xs" :class="darkMode ? 'text-porcelain-600' : 'text-porcelain-400'">
+            Create a pool with <code class="font-mono">zpool create</code> to get started.
+        </p>
+    </div>
+    {{ else }}
+
+    <!-- Pool cards -->
+    <div class="space-y-6" id="zfs-pools">
+        {{ range .Data.Pools }}
+        <div class="rounded-2xl border"
+             :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+            <!-- Pool header row -->
+            <div class="flex items-center justify-between px-6 py-4 border-b"
+                 :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                <div class="flex items-center gap-3">
+                    <svg class="w-5 h-5 flex-shrink-0"
+                         :class="'{{ .Health }}' === 'ONLINE' ? 'text-accent-emerald' : 'text-accent-rose'"
+                         fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                              d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375"/>
+                    </svg>
+                    <h2 class="text-lg font-semibold font-mono"
+                        :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">{{ .Name }}</h2>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs px-2 py-0.5 rounded-full font-medium
+                        {{ if eq .Health "ONLINE" }}badge-success{{ else if eq .Health "DEGRADED" }}badge-warning{{ else }}badge-error{{ end }}">
+                        {{ .Health }}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Pool stats -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0"
+                 :class="darkMode ? 'divide-porcelain-800' : 'divide-porcelain-200'">
+                <div class="px-5 py-4">
+                    <p class="text-xs uppercase tracking-wider mb-1"
+                       :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Used</p>
+                    <p class="text-sm font-semibold"
+                       :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ humanizeBytes .Allocated }}</p>
+                </div>
+                <div class="px-5 py-4">
+                    <p class="text-xs uppercase tracking-wider mb-1"
+                       :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Total</p>
+                    <p class="text-sm font-semibold"
+                       :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ humanizeBytes .Size }}</p>
+                </div>
+                <div class="px-5 py-4">
+                    <p class="text-xs uppercase tracking-wider mb-1"
+                       :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Compression</p>
+                    <p class="text-sm font-semibold font-mono"
+                       :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .CompressionRatio }}</p>
+                </div>
+                <div class="px-5 py-4">
+                    <p class="text-xs uppercase tracking-wider mb-1"
+                       :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Scrub</p>
+                    <p class="text-sm font-semibold"
+                       :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ if .ScrubStatus }}{{ .ScrubStatus }}{{ else }}—{{ end }}</p>
+                </div>
+            </div>
+
+            <!-- Pool usage bar -->
+            {{ if gt .Size 0 }}
+            <div class="px-6 py-3 border-t"
+                 :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                <div class="flex justify-between text-xs mb-1.5"
+                     :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">
+                    <span>{{ percentageString .Allocated .Size }}% used</span>
+                    <span>{{ humanizeBytes .Allocated }} / {{ humanizeBytes .Size }}</span>
+                </div>
+                <div class="porcelain-progress">
+                    <div class="porcelain-progress-bar"
+                         style="width: {{ percentageString .Allocated .Size }}%"></div>
+                </div>
+            </div>
+            {{ end }}
+
+            <!-- Datasets table -->
+            {{ if .Datasets }}
+            <div class="px-6 pb-5 border-t pt-4"
+                 :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                <h3 class="text-sm font-medium mb-3"
+                    :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">
+                    Datasets ({{ len .Datasets }})
+                </h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-xs uppercase tracking-wider"
+                                :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">
+                                <th class="pb-2 pr-6 font-medium">Name</th>
+                                <th class="pb-2 pr-6 font-medium">Used</th>
+                                <th class="pb-2 font-medium">Available</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y"
+                               :class="darkMode ? 'divide-porcelain-800' : 'divide-porcelain-100'">
+                            {{ range .Datasets }}
+                            <tr>
+                                <td class="py-2 pr-6 font-mono text-xs"
+                                    :class="darkMode ? 'text-porcelain-300' : 'text-porcelain-700'">{{ .Name }}</td>
+                                <td class="py-2 pr-6"
+                                    :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">{{ humanizeBytes .Used }}</td>
+                                <td class="py-2"
+                                    :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">{{ humanizeBytes .Available }}</td>
+                            </tr>
+                            {{ end }}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {{ end }}
+        </div>
+        {{ end }}
+    </div>
+    {{ end }}
+</div>
+{{ end }}

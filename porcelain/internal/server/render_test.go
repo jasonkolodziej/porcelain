@@ -249,10 +249,12 @@ func TestPageRender_BreadcrumbAndTitle(t *testing.T) {
 		{"/", "Dashboard", "Dashboard"},
 		{"/network", "Network", "Network"},
 		{"/network/firewall", "Firewall", "Firewall"},
+		{"/network/cloudflare", "Cloudflare", "Cloudflare"},
 		{"/podman", "Containers", "Containers"},
 		{"/diagnostics", "Diagnostics", "Diagnostics"},
 		{"/sensors", "Sensors", "Sensors"},
 		{"/storage", "Storage", "Storage"},
+		{"/storage/zfs", "ZFS", "ZFS"},
 	}
 
 	for _, tc := range cases {
@@ -292,7 +294,7 @@ func TestPageRender_HTMLDocument(t *testing.T) {
 	addr, shutdown, client := newRenderTestServer(t)
 	defer shutdown()
 
-	paths := []string{"/", "/network", "/network/firewall", "/diagnostics", "/podman"}
+	paths := []string{"/", "/network", "/network/firewall", "/network/cloudflare", "/diagnostics", "/podman", "/storage/zfs"}
 
 	for _, path := range paths {
 		path := path
@@ -426,6 +428,91 @@ func TestPageRender_FirewallPage(t *testing.T) {
 }
 
 // =========================================================================
+// TestPageRender_ZFSPage validates the ZFS page heading and empty-state UI.
+// =========================================================================
+
+func TestPageRender_ZFSPage(t *testing.T) {
+	addr, shutdown, client := newRenderTestServer(t)
+	defer shutdown()
+
+	resp := mustGet(t, client, "https://"+addr+"/storage/zfs")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+
+	assertXPageTitle(t, resp, "ZFS")
+
+	doc := parseBody(t, resp)
+
+	assertH1(t, doc, "ZFS")
+	assertLeadText(t, doc, "Pool health, dataset usage, and scrub status")
+	assertBreadcrumb(t, doc, "ZFS")
+
+	bodyText := strings.TrimSpace(doc.Find("body").Text())
+	if !strings.Contains(bodyText, "No ZFS pools found") {
+		t.Fatal("zfs page: empty state not found")
+	}
+}
+
+// =========================================================================
+// TestPageRender_CloudflarePage validates the Cloudflare page empty state.
+// =========================================================================
+
+func TestPageRender_CloudflarePage(t *testing.T) {
+	addr, shutdown, client := newRenderTestServer(t)
+	defer shutdown()
+
+	resp := mustGet(t, client, "https://"+addr+"/network/cloudflare")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+
+	assertXPageTitle(t, resp, "Cloudflare")
+
+	doc := parseBody(t, resp)
+
+	assertH1(t, doc, "Cloudflare")
+	assertLeadText(t, doc, "cloudflared tunnel agent and active tunnels")
+	assertBreadcrumb(t, doc, "Cloudflare")
+
+	bodyText := strings.TrimSpace(doc.Find("body").Text())
+	if !strings.Contains(bodyText, "No tunnels registered.") {
+		t.Fatal("cloudflare page: empty state not found")
+	}
+}
+
+// =========================================================================
+// TestPageRender_PodmanLogsDrawer validates the HTMX log drawer shell.
+// =========================================================================
+
+func TestPageRender_PodmanLogsDrawer(t *testing.T) {
+	addr, shutdown, client := newRenderTestServer(t)
+	defer shutdown()
+
+	resp := mustGet(t, client, "https://"+addr+"/podman")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+
+	doc := parseBody(t, resp)
+
+	if doc.Find("#log-output").Length() != 1 {
+		t.Fatal("podman page: log drawer content target not found")
+	}
+
+	bodyText := strings.TrimSpace(doc.Find("body").Text())
+	if !strings.Contains(bodyText, "Select a container to view logs.") {
+		t.Fatal("podman page: initial log drawer helper text not found")
+	}
+}
+
+// =========================================================================
 // TestPageRender_DiagnosticsPage validates the diagnostics page elements.
 // =========================================================================
 
@@ -476,7 +563,10 @@ func TestPageRender_HTMXPartialSwap(t *testing.T) {
 	}{
 		{"/network", "Network"},
 		{"/network/firewall", "Firewall"},
+		{"/network/cloudflare", "Cloudflare"},
 		{"/diagnostics", "Diagnostics"},
+		{"/podman", "Containers"},
+		{"/storage/zfs", "ZFS"},
 	}
 
 	for _, tc := range cases {
@@ -518,5 +608,25 @@ func TestPageRender_HTMXPartialSwap(t *testing.T) {
 				t.Fatal("HTMX partial should not contain <head> tag")
 			}
 		})
+	}
+}
+
+func TestPodmanLogsAPI_RegistryUnavailable(t *testing.T) {
+	addr, shutdown, client := newRenderTestServer(t)
+	defer shutdown()
+
+	resp := mustGet(t, client, "https://"+addr+"/api/podman/containers/example/logs?tail=100")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status: got %d, want %d", resp.StatusCode, http.StatusServiceUnavailable)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !strings.Contains(string(body), "module registry unavailable") {
+		t.Fatalf("body: got %q", string(body))
 	}
 }

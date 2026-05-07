@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io/fs"
 	"net/http"
 	"os"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,12 +23,14 @@ import (
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/auth"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/config"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/cloudflare"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/diagnostics"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/firewall"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/network"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/podman"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/sensors"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/storage"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/zfs"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/policy"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/server/middleware"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/templates"
@@ -120,6 +124,36 @@ func registerPodmanAPI(app *fiber.App, registry *modules.Registry, authorizer po
 		}
 		return c.JSON(map[string]string{"status": "ok"})
 	})
+
+	// GET /api/podman/containers/:id/logs?tail=N
+	// Returns escaped HTML for use by the HTMX log drawer.
+	app.Get("/api/podman/containers/:id/logs", func(c fiber.Ctx) error {
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("podman")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("podman module not registered")
+		}
+		pm, isPodman := m.(*podman.Module)
+		if !isPodman {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid podman module type")
+		}
+
+		tail := 100
+		if raw := c.Query("tail"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 2000 {
+				tail = n
+			}
+		}
+
+		logs, err := pm.ContainerLogs(c.Context(), c.Params("id"), tail)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+		}
+		c.Type("html")
+		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(logs) + "</pre>")
+	})
 }
 
 func registerSystemdAPI(app *fiber.App, registry *modules.Registry, authorizer policy.Authorizer) {
@@ -206,9 +240,7 @@ func registerPageRoutes(app *fiber.App, engine *templates.Engine, cfg config.Con
 	}))
 
 	app.Get("/storage/zfs", renderPage(engine, cfg, registry, "storage-zfs", "zfs", "ZFS", func(c fiber.Ctx) any {
-		return placeholderFor(c.Context(), registry, "zfs", "ZFS",
-			"Pool and dataset rendering arrives in a future slice.",
-			"This page will surface zpool / zfs status, scrub progress, and dataset usage once the live ZFS backend ships.")
+		return zfsPageData(c.Context(), registry)
 	}))
 
 	app.Get("/network", renderPage(engine, cfg, registry, "network", "network", "Network", func(c fiber.Ctx) any {
@@ -220,9 +252,7 @@ func registerPageRoutes(app *fiber.App, engine *templates.Engine, cfg config.Con
 	}))
 
 	app.Get("/network/cloudflare", renderPage(engine, cfg, registry, "network-cloudflare", "cloudflare", "Cloudflare", func(c fiber.Ctx) any {
-		return placeholderFor(c.Context(), registry, "cloudflare", "Cloudflare",
-			"cloudflared tunnel status arrives in a future slice.",
-			"This page will surface tunnel state, ingress routes, and edge connectivity once the cloudflared client lands.")
+		return cloudflarePageData(c.Context(), registry)
 	}))
 
 	app.Get("/podman", renderPage(engine, cfg, registry, "podman", "podman", "Containers", func(c fiber.Ctx) any {
@@ -445,6 +475,68 @@ func networkDeviceStateLabel(s uint32) string {
 // moduleOverview builds a generic overview for a leaf module page.
 func moduleOverview(ctx context.Context, registry *modules.Registry, id, heading, blurb, detail string) viewdata.PlaceholderData {
 	return placeholderFor(ctx, registry, id, heading, blurb, detail)
+}
+
+// zfsPageData composes the ZFS page from the zfs module snapshot.
+func zfsPageData(ctx context.Context, registry *modules.Registry) viewdata.ZFSPageData {
+	data := viewdata.ZFSPageData{
+		Heading: "ZFS",
+		Blurb:   "Pool health, dataset usage, and scrub status",
+		Detail:  "ZFS module unavailable",
+	}
+	if registry == nil {
+		return data
+	}
+	m, ok := registry.Get("zfs")
+	if !ok {
+		return data
+	}
+	data.StatusBadge = badgeFor(m.Status(ctx))
+	zm, isZFS := m.(*zfs.Module)
+	if !isZFS {
+		data.Detail = "invalid zfs module type"
+		return data
+	}
+	snap, err := zm.Snapshot(ctx)
+	if err != nil {
+		data.Detail = err.Error()
+		return data
+	}
+	if snap.StatusBadge == nil {
+		snap.StatusBadge = data.StatusBadge
+	}
+	return snap
+}
+
+// cloudflarePageData composes the Cloudflare page from the cloudflare module snapshot.
+func cloudflarePageData(ctx context.Context, registry *modules.Registry) viewdata.CloudflarePageData {
+	data := viewdata.CloudflarePageData{
+		Heading: "Cloudflare",
+		Blurb:   "cloudflared tunnel agent and active tunnels",
+		Detail:  "Cloudflare module unavailable",
+	}
+	if registry == nil {
+		return data
+	}
+	m, ok := registry.Get("cloudflare")
+	if !ok {
+		return data
+	}
+	data.StatusBadge = badgeFor(m.Status(ctx))
+	cm, isCF := m.(*cloudflare.Module)
+	if !isCF {
+		data.Detail = "invalid cloudflare module type"
+		return data
+	}
+	snap, err := cm.Snapshot(ctx)
+	if err != nil {
+		data.Detail = err.Error()
+		return data
+	}
+	if snap.StatusBadge == nil {
+		snap.StatusBadge = data.StatusBadge
+	}
+	return snap
 }
 
 // podmanPageData composes the containers page from the podman module snapshot.

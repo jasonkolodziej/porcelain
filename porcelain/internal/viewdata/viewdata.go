@@ -344,3 +344,50 @@ type FirewallZone struct {
 	Interfaces []string
 	Services   []string
 }
+
+// ZFSPageData backs modules/zfs.html (Phase 4).
+type ZFSPageData struct {
+	Heading     string
+	Blurb       string
+	Detail      string
+	Pools       []ZFSPool
+	StatusBadge *templates.StatusBadge
+}
+
+// ZFSPool is one zpool entry.
+type ZFSPool struct {
+	Name             string
+	Health           string
+	Allocated        int64
+	Size             int64
+	CompressionRatio string
+	Deduplication    string
+	ScrubStatus      string
+	LastScrub        string
+	Datasets         []ZFSDataset
+}
+
+// ZFSDataset is one zfs dataset under a pool.
+type ZFSDataset struct {
+	Name      string
+	Used      int64
+	Available int64
+}
+
+// CloudflarePageData backs modules/cloudflare.html (Phase 4).
+type CloudflarePageData struct {
+	Heading     string
+	Blurb       string
+	Detail      string
+	Version     string
+	Tunnels     []CloudflareTunnel
+	StatusBadge *templates.StatusBadge
+}
+
+// CloudflareTunnel is one cloudflared tunnel entry.
+type CloudflareTunnel struct {
+	ID        string
+	Name      string
+	CreatedAt string
+	Status    string
+}
