@@ -446,16 +446,27 @@ Route Handler:
   - **done (integration wave):** pool create/destroy, scrub start/stop,
     snapshot trigger, and recent event capture are now wired via API routes
     and surfaced in Storage/ZFS frontend controls.
-  - **deferred:** true streaming event subscriptions and long-running task
-    progress channels.
+  - **done (focused follow-up):** recent ZFS operations are now tracked and
+    surfaced through `/api/zfs/tasks` with near-live HTMX polling on
+    `/storage/zfs`; event output also auto-refreshes for near-live visibility.
+  - **done (streaming follow-up):** `/storage/zfs` now subscribes to
+    `/api/zfs/stream` over SSE so event and task panels update through a
+    persistent stream instead of timer-based polling, while preserving manual
+    refresh fallbacks.
+  - **deferred:** richer per-operation progress telemetry beyond periodic
+    streamed snapshots.
 - lm-sensors inventory and telemetry views
   - **done (phase 2 slice):** `sensors` module now parses `sensors -j`
     telemetry when available, rendering per-chip readings, high/critical values,
     and critical highlighting in the dedicated `/sensors` UI.
   - **done (integration wave):** configurable in-memory alert thresholds and
     per-reading history sampling are now available with frontend controls.
-  - **deferred:** persisted time-series storage and chart visualizations beyond
-    text-based history views.
+  - **done (focused follow-up):** history and thresholds now persist to local
+    state on disk, and `/sensors` includes a chart action backed by
+    `/api/sensors/history/chart` plus `/api/sensors/history.json` for raw
+    samples.
+  - **deferred:** richer multi-series charting and longer-term retention/
+    rollups.
 - Cloudflare tunnel management with encrypted credential handling
   - **done (initial slice):** `cloudflare` module probe and dedicated
     `/network/cloudflare` UI route.

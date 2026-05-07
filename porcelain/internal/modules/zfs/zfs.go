@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules"
@@ -17,14 +18,28 @@ import (
 // Module implements modules.Module for the ZFS sub-page under Storage.
 type Module struct {
 	mode string
+
+	mu    sync.Mutex
+	tasks []Task
+}
+
+// Task is one tracked ZFS operation (scrub/snapshot/create/destroy).
+type Task struct {
+	ID        string    `json:"id"`
+	Action    string    `json:"action"`
+	Target    string    `json:"target"`
+	State     string    `json:"state"`
+	Message   string    `json:"message"`
+	StartedAt time.Time `json:"started_at"`
+	EndedAt   time.Time `json:"ended_at"`
 }
 
 // New returns a Module that probes for the zpool binary on PATH.
 func New(_ context.Context) *Module {
 	if _, err := exec.LookPath("zpool"); err == nil {
-		return &Module{mode: "present"}
+		return &Module{mode: "present", tasks: []Task{}}
 	}
-	return &Module{mode: "fake"}
+	return &Module{mode: "fake", tasks: []Task{}}
 }
 
 // ID implements modules.Module.
@@ -239,10 +254,12 @@ func (m *Module) CreatePool(ctx context.Context, name, raid, compression string,
 		}
 	}
 
+	taskID := m.taskStart("create-pool", name)
 	createCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	out, err := exec.CommandContext(createCtx, "zpool", args...).CombinedOutput()
 	if err != nil {
+		m.taskFail(taskID, strings.TrimSpace(string(out)))
 		return fmt.Errorf("zpool create failed: %s", strings.TrimSpace(string(out)))
 	}
 
@@ -254,8 +271,10 @@ func (m *Module) CreatePool(ctx context.Context, name, raid, compression string,
 	defer setCancel()
 	setOut, setErr := exec.CommandContext(setCtx, "zfs", "set", "compression="+compression, name).CombinedOutput()
 	if setErr != nil {
+		m.taskFail(taskID, strings.TrimSpace(string(setOut)))
 		return fmt.Errorf("pool created but compression set failed: %s", strings.TrimSpace(string(setOut)))
 	}
+	m.taskDone(taskID, "pool created")
 	return nil
 }
 
@@ -269,12 +288,15 @@ func (m *Module) DestroyPool(ctx context.Context, name string) error {
 		return fmt.Errorf("pool name is required")
 	}
 
+	taskID := m.taskStart("destroy-pool", name)
 	destroyCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(destroyCtx, "zpool", "destroy", name).CombinedOutput()
 	if err != nil {
+		m.taskFail(taskID, strings.TrimSpace(string(out)))
 		return fmt.Errorf("zpool destroy failed: %s", strings.TrimSpace(string(out)))
 	}
+	m.taskDone(taskID, "pool destroyed")
 	return nil
 }
 
@@ -287,12 +309,15 @@ func (m *Module) StartScrub(ctx context.Context, name string) error {
 	if name == "" {
 		return fmt.Errorf("pool name is required")
 	}
+	taskID := m.taskStart("scrub-start", name)
 	scrubCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(scrubCtx, "zpool", "scrub", name).CombinedOutput()
 	if err != nil {
+		m.taskFail(taskID, strings.TrimSpace(string(out)))
 		return fmt.Errorf("zpool scrub failed: %s", strings.TrimSpace(string(out)))
 	}
+	m.taskDone(taskID, "scrub started")
 	return nil
 }
 
@@ -305,12 +330,15 @@ func (m *Module) StopScrub(ctx context.Context, name string) error {
 	if name == "" {
 		return fmt.Errorf("pool name is required")
 	}
+	taskID := m.taskStart("scrub-stop", name)
 	scrubCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(scrubCtx, "zpool", "scrub", "-s", name).CombinedOutput()
 	if err != nil {
+		m.taskFail(taskID, strings.TrimSpace(string(out)))
 		return fmt.Errorf("zpool scrub stop failed: %s", strings.TrimSpace(string(out)))
 	}
+	m.taskDone(taskID, "scrub stop requested")
 	return nil
 }
 
@@ -329,12 +357,15 @@ func (m *Module) CreateSnapshot(ctx context.Context, dataset, snapshotName strin
 	}
 	target := dataset + "@" + snapshotName
 
+	taskID := m.taskStart("snapshot", dataset)
 	snapCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(snapCtx, "zfs", "snapshot", target).CombinedOutput()
 	if err != nil {
+		m.taskFail(taskID, strings.TrimSpace(string(out)))
 		return fmt.Errorf("zfs snapshot failed: %s", strings.TrimSpace(string(out)))
 	}
+	m.taskDone(taskID, "snapshot created")
 	return nil
 }
 
@@ -367,4 +398,71 @@ func (m *Module) RecentEvents(ctx context.Context, limit int) ([]string, error) 
 		clean = clean[len(clean)-limit:]
 	}
 	return clean, nil
+}
+
+// RecentTasks returns newest-first tracked operations, capped by limit.
+func (m *Module) RecentTasks(limit int) []Task {
+	if m == nil {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 30
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.tasks) == 0 {
+		return nil
+	}
+	out := make([]Task, 0, min(limit, len(m.tasks)))
+	for i := len(m.tasks) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, m.tasks[i])
+	}
+	return out
+}
+
+func (m *Module) taskStart(action, target string) string {
+	if m == nil {
+		return ""
+	}
+	now := time.Now().UTC()
+	id := fmt.Sprintf("%d", now.UnixNano())
+	task := Task{ID: id, Action: action, Target: target, State: "running", StartedAt: now}
+	m.mu.Lock()
+	m.tasks = append(m.tasks, task)
+	if len(m.tasks) > 200 {
+		m.tasks = m.tasks[len(m.tasks)-200:]
+	}
+	m.mu.Unlock()
+	return id
+}
+
+func (m *Module) taskDone(id, msg string) {
+	m.updateTask(id, "done", msg)
+}
+
+func (m *Module) taskFail(id, msg string) {
+	m.updateTask(id, "failed", msg)
+}
+
+func (m *Module) updateTask(id, state, msg string) {
+	if m == nil || id == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := len(m.tasks) - 1; i >= 0; i-- {
+		if m.tasks[i].ID == id {
+			m.tasks[i].State = state
+			m.tasks[i].Message = msg
+			m.tasks[i].EndedAt = time.Now().UTC()
+			return
+		}
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

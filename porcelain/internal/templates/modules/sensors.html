@@ -27,12 +27,17 @@
              :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
         <div class="flex items-center justify-between mb-2">
             <h2 class="text-sm font-semibold uppercase tracking-wide" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">History Output</h2>
-            <span class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Sampled on each page refresh</span>
+            <span class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Persisted to disk and sampled each page refresh</span>
         </div>
         <div id="sensor-history-output"
              class="min-h-24 rounded-lg border p-3 font-mono text-xs whitespace-pre-wrap"
              :class="darkMode ? 'border-porcelain-800 text-porcelain-300 bg-porcelain-950/60' : 'border-porcelain-200 text-porcelain-700 bg-porcelain-50'">
             Select a reading and click History to view recent samples.
+        </div>
+        <div id="sensor-chart-output"
+             class="mt-3 min-h-24 rounded-lg border p-3 text-xs"
+             :class="darkMode ? 'border-porcelain-800 text-porcelain-300 bg-porcelain-950/60' : 'border-porcelain-200 text-porcelain-700 bg-porcelain-50'">
+            Select a reading and click Chart to visualize the persisted history.
         </div>
     </section>
 
@@ -69,6 +74,12 @@
                                 hx-target="#sensor-history-output"
                                 hx-swap="innerHTML">
                             History
+                        </button>
+                        <button class="btn btn-secondary btn-sm"
+                                hx-get="/api/sensors/history/chart?chip={{ $chipName }}&reading={{ .Name }}&limit=60"
+                                hx-target="#sensor-chart-output"
+                                hx-swap="innerHTML">
+                            Chart
                         </button>
                         <form class="flex items-center gap-2"
                               hx-post="/api/sensors/thresholds"

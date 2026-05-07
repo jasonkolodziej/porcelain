@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,6 +26,7 @@ const noteNotInstalled = "lm-sensors not installed"
 type Module struct {
 	mode string
 	note string
+	path string
 
 	mu         sync.Mutex
 	history    map[string][]historyPoint
@@ -41,10 +44,33 @@ type ReadingHistoryPoint struct {
 	Value     float64 `json:"value"`
 }
 
+type persistedState struct {
+	History    map[string][]persistedPoint `json:"history"`
+	Thresholds map[string]float64          `json:"thresholds"`
+}
+
+type persistedPoint struct {
+	AtUnix int64   `json:"at_unix"`
+	Value  float64 `json:"value"`
+}
+
 // New returns a Module that probes lm-sensors command availability.
 func New(ctx context.Context) *Module {
+	statePath := defaultStatePath()
+	newModule := func(mode, note string) *Module {
+		m := &Module{
+			mode:       mode,
+			note:       note,
+			path:       statePath,
+			history:    map[string][]historyPoint{},
+			thresholds: map[string]float64{},
+		}
+		m.loadState()
+		return m
+	}
+
 	if _, err := exec.LookPath("sensors"); err != nil {
-		return &Module{mode: "fake", note: noteNotInstalled, history: map[string][]historyPoint{}, thresholds: map[string]float64{}}
+		return newModule("fake", noteNotInstalled)
 	}
 
 	probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -52,12 +78,12 @@ func New(ctx context.Context) *Module {
 	cmd := exec.CommandContext(probeCtx, "sensors", "-u")
 	if err := cmd.Run(); err != nil {
 		if errors.Is(probeCtx.Err(), context.DeadlineExceeded) {
-			return &Module{mode: "degraded", note: "sensors probe timed out", history: map[string][]historyPoint{}, thresholds: map[string]float64{}}
+			return newModule("degraded", "sensors probe timed out")
 		}
-		return &Module{mode: "degraded", note: "sensors command failed", history: map[string][]historyPoint{}, thresholds: map[string]float64{}}
+		return newModule("degraded", "sensors command failed")
 	}
 
-	return &Module{mode: "sensors", history: map[string][]historyPoint{}, thresholds: map[string]float64{}}
+	return newModule("sensors", "")
 }
 
 // ID implements modules.Module.
@@ -137,6 +163,7 @@ func (m *Module) SetThreshold(chipName, readingName, value string) error {
 	}
 	m.mu.Lock()
 	m.thresholds[historyKey(chipName, readingName)] = v
+	m.saveStateLocked()
 	m.mu.Unlock()
 	return nil
 }
@@ -148,6 +175,7 @@ func (m *Module) ClearThreshold(chipName, readingName string) {
 	}
 	m.mu.Lock()
 	delete(m.thresholds, historyKey(chipName, readingName))
+	m.saveStateLocked()
 	m.mu.Unlock()
 }
 
@@ -203,10 +231,76 @@ func (m *Module) applyThresholdsAndHistory(chips []viewdata.SensorChip) {
 			m.history[key] = series
 		}
 	}
+
+	m.saveStateLocked()
 }
 
 func historyKey(chipName, readingName string) string {
 	return chipName + "::" + readingName
+}
+
+func (m *Module) loadState() {
+	if m == nil || strings.TrimSpace(m.path) == "" {
+		return
+	}
+	raw, err := os.ReadFile(m.path)
+	if err != nil {
+		return
+	}
+	var state persistedState
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return
+	}
+	if state.Thresholds != nil {
+		m.thresholds = state.Thresholds
+	}
+	if state.History != nil {
+		m.history = make(map[string][]historyPoint, len(state.History))
+		for key, points := range state.History {
+			series := make([]historyPoint, 0, len(points))
+			for _, p := range points {
+				series = append(series, historyPoint{At: time.Unix(p.AtUnix, 0).UTC(), Value: p.Value})
+			}
+			m.history[key] = series
+		}
+	}
+}
+
+func (m *Module) saveStateLocked() {
+	if m == nil || strings.TrimSpace(m.path) == "" {
+		return
+	}
+	state := persistedState{
+		History:    make(map[string][]persistedPoint, len(m.history)),
+		Thresholds: make(map[string]float64, len(m.thresholds)),
+	}
+	for key, val := range m.thresholds {
+		state.Thresholds[key] = val
+	}
+	for key, points := range m.history {
+		series := make([]persistedPoint, 0, len(points))
+		for _, p := range points {
+			series = append(series, persistedPoint{AtUnix: p.At.Unix(), Value: p.Value})
+		}
+		state.History[key] = series
+	}
+
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(m.path), 0o700); err != nil {
+		return
+	}
+	_ = os.WriteFile(m.path, raw, 0o600)
+}
+
+func defaultStatePath() string {
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return ""
+	}
+	return filepath.Join(home, ".local", "state", "porcelain", "sensors-state.json")
 }
 
 func readSensorsJSON(ctx context.Context) ([]viewdata.SensorChip, error) {

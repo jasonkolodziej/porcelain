@@ -15,6 +15,8 @@ import (
 
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/auth"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/config"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/zfs"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/server"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/testpki"
 	"github.com/jasonkolodziej/porcelain/porcelain/pkg/api"
@@ -244,6 +246,62 @@ func TestPolicyGatedWriteRoutesWithDexEnabled(t *testing.T) {
 			t.Fatalf("status: %d", resp.StatusCode)
 		}
 	})
+}
+
+func TestZFSEventStream(t *testing.T) {
+	bundle := testpki.New(t, "operator@example.com")
+
+	cfg := config.Config{
+		Server:       config.ServerConfig{Address: "127.0.0.1:0"},
+		Auth:         config.AuthConfig{Enabled: false},
+		DBus:         config.DBusConfig{Bus: "system", Optional: true},
+		Secrets:      config.SecretsConfig{Backend: "memory"},
+		Certificates: config.CertificatesConfig{Backend: "selfsigned", CommonName: "localhost"},
+	}
+
+	registry := modules.NewRegistry()
+	registry.Register(zfs.New(context.Background()))
+
+	dexAuth := auth.NewDexAuth(cfg.Auth, nil)
+	app, err := server.NewRouter(cfg, dexAuth, registry)
+	if err != nil {
+		t.Fatalf("NewRouter: %v", err)
+	}
+
+	addr, shutdown := startMTLSServer(t, app, bundle)
+	defer shutdown()
+
+	client := newClient(bundle.ClientTLSConfig())
+	req, err := http.NewRequest(http.MethodGet, "https://"+addr+"/api/zfs/stream?eventLimit=5&taskLimit=5", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("do request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "text/event-stream") {
+		t.Fatalf("content-type: %q", got)
+	}
+
+	buf := make([]byte, 1024)
+	n, err := resp.Body.Read(buf)
+	if err != nil && err != io.EOF {
+		t.Fatalf("read stream: %v", err)
+	}
+	chunk := string(buf[:n])
+	if !strings.Contains(chunk, "event: events") {
+		t.Fatalf("stream missing events frame: %q", chunk)
+	}
+	if !strings.Contains(chunk, "event: tasks") {
+		t.Fatalf("stream missing tasks frame: %q", chunk)
+	}
 }
 
 // startMTLSServer wires the Fiber app behind a TLS listener that requires a

@@ -449,6 +449,9 @@ func TestPageRender_ZFSPage(t *testing.T) {
 	assertH1(t, doc, "ZFS")
 	assertLeadText(t, doc, "Pool health, dataset usage, and scrub status")
 	assertBreadcrumb(t, doc, "ZFS")
+	if streamURL, ok := doc.Find("#zfs-stream-root").Attr("data-zfs-stream-url"); !ok || !strings.Contains(streamURL, "/api/zfs/stream") {
+		t.Fatal("zfs page: stream URL wiring not found")
+	}
 
 	bodyText := strings.TrimSpace(doc.Find("body").Text())
 	if !strings.Contains(bodyText, "No ZFS pools found") {

@@ -1,5 +1,68 @@
 {{ define "content" }}
-<div class="space-y-6">
+<div id="zfs-stream-root"
+     class="space-y-6"
+     data-zfs-stream-url="/api/zfs/stream?eventLimit=60&amp;taskLimit=20"
+     data-zfs-events-url="/api/zfs/events?limit=60"
+     data-zfs-tasks-url="/api/zfs/tasks?limit=20"
+     x-data="{
+        stream: null,
+        teardown: null,
+        init() {
+            this.teardown = (evt) => {
+                if (evt.detail && evt.detail.target && evt.detail.target.id === 'main-content') {
+                    this.closeStream();
+                    document.body.removeEventListener('htmx:beforeSwap', this.teardown);
+                }
+            };
+            document.body.addEventListener('htmx:beforeSwap', this.teardown);
+            this.startStream();
+        },
+        startStream() {
+            this.closeStream();
+            const root = document.getElementById('zfs-stream-root');
+            if (!root) {
+                return;
+            }
+            if (!window.EventSource) {
+                this.refreshFallback();
+                return;
+            }
+            const stream = new EventSource(root.dataset.zfsStreamUrl);
+            this.stream = stream;
+            stream.addEventListener('events', (event) => {
+                const target = document.getElementById('zfs-events-output');
+                if (target) {
+                    target.innerHTML = event.data;
+                }
+            });
+            stream.addEventListener('tasks', (event) => {
+                const target = document.getElementById('zfs-task-output');
+                if (target) {
+                    target.innerHTML = event.data;
+                }
+            });
+            stream.onerror = () => {
+                if (stream.readyState === EventSource.CLOSED) {
+                    this.stream = null;
+                    this.refreshFallback();
+                }
+            };
+        },
+        refreshFallback() {
+            const root = document.getElementById('zfs-stream-root');
+            if (!root || !window.htmx) {
+                return;
+            }
+            htmx.ajax('GET', root.dataset.zfsEventsUrl, { target: '#zfs-events-output' });
+            htmx.ajax('GET', root.dataset.zfsTasksUrl, { target: '#zfs-task-output' });
+        },
+        closeStream() {
+            if (this.stream) {
+                this.stream.close();
+                this.stream = null;
+            }
+        }
+     }">
     <!-- Header -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -40,6 +103,24 @@
              class="min-h-24 rounded-lg border p-3 font-mono text-xs whitespace-pre-wrap"
              :class="darkMode ? 'border-porcelain-800 text-porcelain-300 bg-porcelain-950/60' : 'border-porcelain-200 text-porcelain-700 bg-porcelain-50'">
             Recent zpool events will appear here.
+        </div>
+    </section>
+
+    <section class="rounded-2xl border p-4 space-y-3"
+             :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <div class="flex items-center justify-between">
+            <h2 class="text-sm font-semibold uppercase tracking-wide" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">Operation Progress</h2>
+            <button class="btn btn-secondary btn-sm"
+                    hx-get="/api/zfs/tasks?limit=20"
+                    hx-target="#zfs-task-output"
+                    hx-swap="innerHTML">
+                Refresh
+            </button>
+        </div>
+        <div id="zfs-task-output"
+             class="min-h-24 rounded-lg border p-3 text-xs"
+             :class="darkMode ? 'border-porcelain-800 text-porcelain-300 bg-porcelain-950/60' : 'border-porcelain-200 text-porcelain-700 bg-porcelain-50'">
+            ZFS task history will appear here.
         </div>
     </section>
 

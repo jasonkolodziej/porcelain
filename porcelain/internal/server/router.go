@@ -2,6 +2,7 @@ package server
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -501,13 +502,165 @@ func registerZFSAPI(app *fiber.App, registry *modules.Registry, authorizer polic
 				limit = n
 			}
 		}
-		lines, err := zm.RecentEvents(c.Context(), limit)
+		output, err := renderZFSEventsHTML(c.Context(), zm, limit)
 		if err != nil {
 			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
 		}
 		c.Type("html")
-		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(strings.Join(lines, "\n")) + "</pre>")
+		return c.SendString(output)
 	})
+
+	app.Get("/api/zfs/tasks", func(c fiber.Ctx) error {
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("zfs")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("zfs module not registered")
+		}
+		zm, isZFS := m.(*zfs.Module)
+		if !isZFS {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid zfs module type")
+		}
+		limit := 20
+		if raw := c.Query("limit"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 200 {
+				limit = n
+			}
+		}
+		output := renderZFSTasksHTML(zm, limit)
+		c.Type("html")
+		return c.SendString(output)
+	})
+
+	app.Get("/api/zfs/stream", func(c fiber.Ctx) error {
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("zfs")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("zfs module not registered")
+		}
+		zm, isZFS := m.(*zfs.Module)
+		if !isZFS {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid zfs module type")
+		}
+
+		eventLimit := 60
+		if raw := c.Query("eventLimit"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 200 {
+				eventLimit = n
+			}
+		}
+		taskLimit := 20
+		if raw := c.Query("taskLimit"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 200 {
+				taskLimit = n
+			}
+		}
+
+		requestCtx := c.RequestCtx()
+		c.Set(fiber.HeaderContentType, "text/event-stream")
+		c.Set(fiber.HeaderCacheControl, "no-cache")
+		c.Set(fiber.HeaderConnection, "keep-alive")
+		c.Set("X-Accel-Buffering", "no")
+
+		return c.SendStreamWriter(func(w *bufio.Writer) {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+
+			sendSnapshot := func() bool {
+				eventsHTML, err := renderZFSEventsHTML(context.Background(), zm, eventLimit)
+				if err != nil {
+					eventsHTML = renderZFSStreamErrorHTML(err)
+				}
+				if err := writeSSEEvent(w, "events", eventsHTML); err != nil {
+					return false
+				}
+
+				tasksHTML := renderZFSTasksHTML(zm, taskLimit)
+				if err := writeSSEEvent(w, "tasks", tasksHTML); err != nil {
+					return false
+				}
+
+				return w.Flush() == nil
+			}
+
+			if !sendSnapshot() {
+				return
+			}
+
+			for {
+				select {
+				case <-requestCtx.Done():
+					return
+				case <-ticker.C:
+					if !sendSnapshot() {
+						return
+					}
+				}
+			}
+		})
+	})
+}
+
+func renderZFSEventsHTML(ctx context.Context, zm *zfs.Module, limit int) (string, error) {
+	lines, err := zm.RecentEvents(ctx, limit)
+	if err != nil {
+		return "", err
+	}
+	return "<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" +
+		html.EscapeString(strings.Join(lines, "\n")) + "</pre>", nil
+}
+
+func renderZFSTasksHTML(zm *zfs.Module, limit int) string {
+	tasks := zm.RecentTasks(limit)
+	if len(tasks) == 0 {
+		return "<p class=\"text-xs\">No tracked ZFS operations yet.</p>"
+	}
+
+	var b strings.Builder
+	b.WriteString("<div class=\"space-y-1\">")
+	for _, task := range tasks {
+		stateClass := "badge-neutral"
+		if task.State == "done" {
+			stateClass = "badge-success"
+		} else if task.State == "failed" {
+			stateClass = "badge-danger"
+		} else if task.State == "running" {
+			stateClass = "badge-warning"
+		}
+		b.WriteString("<div class=\"rounded border px-2 py-1\">")
+		b.WriteString("<div class=\"flex items-center justify-between gap-2\">")
+		b.WriteString("<span class=\"text-xs font-mono\">" + html.EscapeString(task.Action+" "+task.Target) + "</span>")
+		b.WriteString("<span class=\"badge " + stateClass + "\">" + html.EscapeString(task.State) + "</span>")
+		b.WriteString("</div>")
+		if strings.TrimSpace(task.Message) != "" {
+			b.WriteString("<p class=\"text-xs mt-1\">" + html.EscapeString(task.Message) + "</p>")
+		}
+		b.WriteString("<p class=\"text-[11px] opacity-70 mt-1\">" + html.EscapeString(task.StartedAt.Format(time.RFC3339)) + "</p>")
+		b.WriteString("</div>")
+	}
+	b.WriteString("</div>")
+
+	return b.String()
+}
+
+func renderZFSStreamErrorHTML(err error) string {
+	return "<p class=\"text-xs text-accent-danger\">" + html.EscapeString(err.Error()) + "</p>"
+}
+
+func writeSSEEvent(w *bufio.Writer, name, data string) error {
+	if _, err := w.WriteString("event: " + name + "\n"); err != nil {
+		return err
+	}
+	for _, line := range strings.Split(data, "\n") {
+		if _, err := w.WriteString("data: " + line + "\n"); err != nil {
+			return err
+		}
+	}
+	_, err := w.WriteString("\n")
+	return err
 }
 
 func registerCloudflareAPI(app *fiber.App, registry *modules.Registry, authorizer policy.Authorizer) {
@@ -676,6 +829,94 @@ func registerSensorsAPI(app *fiber.App, registry *modules.Registry, authorizer p
 		}
 		c.Type("html")
 		return c.SendString("<pre class=\"m-0 whitespace-pre-wrap font-mono text-xs leading-relaxed\">" + html.EscapeString(strings.Join(lines, "\n")) + "</pre>")
+	})
+
+	app.Get("/api/sensors/history.json", func(c fiber.Ctx) error {
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("sensors")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("sensors module not registered")
+		}
+		sm, isSensors := m.(*sensors.Module)
+		if !isSensors {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid sensors module type")
+		}
+		limit := 30
+		if raw := c.Query("limit"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 240 {
+				limit = n
+			}
+		}
+		points := sm.History(c.Query("chip"), c.Query("reading"), limit)
+		return c.JSON(points)
+	})
+
+	app.Get("/api/sensors/history/chart", func(c fiber.Ctx) error {
+		if registry == nil {
+			return c.Status(fiber.StatusServiceUnavailable).SendString(errModuleRegistryUnavailable)
+		}
+		m, ok := registry.Get("sensors")
+		if !ok {
+			return c.Status(fiber.StatusServiceUnavailable).SendString("sensors module not registered")
+		}
+		sm, isSensors := m.(*sensors.Module)
+		if !isSensors {
+			return c.Status(fiber.StatusInternalServerError).SendString("invalid sensors module type")
+		}
+		limit := 30
+		if raw := c.Query("limit"); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 240 {
+				limit = n
+			}
+		}
+		points := sm.History(c.Query("chip"), c.Query("reading"), limit)
+		if len(points) < 2 {
+			return c.SendString("<p class=\"text-xs\">Not enough points yet for a chart. Refresh sensors a few times.</p>")
+		}
+
+		minVal := points[0].Value
+		maxVal := points[0].Value
+		for _, p := range points {
+			if p.Value < minVal {
+				minVal = p.Value
+			}
+			if p.Value > maxVal {
+				maxVal = p.Value
+			}
+		}
+		if maxVal == minVal {
+			maxVal = minVal + 1
+		}
+
+		width := 640.0
+		height := 160.0
+		pad := 12.0
+		spanX := width - 2*pad
+		spanY := height - 2*pad
+		var pathData strings.Builder
+		for i, p := range points {
+			x := pad + (float64(i)/float64(len(points)-1))*spanX
+			y := pad + (1-((p.Value-minVal)/(maxVal-minVal)))*spanY
+			if i == 0 {
+				pathData.WriteString(fmt.Sprintf("M %.2f %.2f", x, y))
+			} else {
+				pathData.WriteString(fmt.Sprintf(" L %.2f %.2f", x, y))
+			}
+		}
+
+		svg := "<div class=\"space-y-2\">" +
+			"<p class=\"text-xs\">" + html.EscapeString(c.Query("chip")+" / "+c.Query("reading")) + "</p>" +
+			"<svg viewBox=\"0 0 640 160\" class=\"w-full h-40 rounded border\">" +
+			"<rect x=\"0\" y=\"0\" width=\"640\" height=\"160\" fill=\"transparent\"/>" +
+			"<path d=\"" + pathData.String() + "\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"/>" +
+			"</svg>" +
+			"<p class=\"text-xs\">min: " + fmt.Sprintf("%.2f", minVal) + " max: " + fmt.Sprintf("%.2f", maxVal) + "</p>" +
+			"</div>"
+
+		c.Type("html")
+		return c.SendString(svg)
 	})
 }
 
