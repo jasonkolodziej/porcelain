@@ -1,0 +1,46 @@
+variant: fcos
+version: 1.5.0
+
+systemd:
+  units:
+    - name: porcelain.socket
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Porcelain socket activation
+
+        [Socket]
+        ListenStream=443
+        BindIPv6Only=both
+
+        [Install]
+        WantedBy=sockets.target
+    - name: porcelain.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Porcelain system administration daemon
+        After=network.target
+
+        [Service]
+        Type=notify
+        ExecStart=/usr/local/bin/porcelain
+        Restart=on-failure
+        Environment=PORCELAIN_SECRETS_BACKEND=systemd-creds
+        Environment=PORCELAIN_CERTIFICATES_BACKEND=selfsigned
+        Environment=PORCELAIN_DEX_CLIENT_SECRET_PATH=auth/dex/client-secret
+        ReadWritePaths=/var/lib/porcelain /etc/cloudflared
+        SystemCallFilter=@system-service
+        SystemCallErrorNumber=EPERM
+        NoNewPrivileges=true
+        PrivateTmp=true
+        ProtectSystem=strict
+        ProtectHome=yes
+
+        [Install]
+        WantedBy=multi-user.target
+
+storage:
+  directories:
+    - path: /var/lib/porcelain/secrets
+      mode: 0700

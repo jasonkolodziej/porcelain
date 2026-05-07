@@ -1,8 +1,12 @@
 {
   "folders": [
     {
-      "path": "."
-    }
+      "path": ".",
+    },
+    {
+      "name": "porcelain",
+      "path": "porcelain",
+    },
   ],
   "settings": {},
   "extensions": {
@@ -15,15 +19,15 @@
       "esbenp.prettier-vscode",
       "redhat.vscode-yaml",
       "yzhang.markdown-all-in-one",
-      "streetsidesoftware.code-spell-checker"
-    ]
+      "streetsidesoftware.code-spell-checker",
+    ],
   },
   "launch": {
     "version": "0.2.0",
-    "configurations": []
+    "configurations": [],
   },
   "tasks": {
     "version": "2.0.0",
-    "tasks": []
-  }
+    "tasks": [],
+  },
 }

@@ -1,0 +1,24 @@
+[Unit]
+Description=Porcelain system administration daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/porcelain
+Restart=on-failure
+Environment=PORCELAIN_SOCKET_ACTIVATION=true
+Environment=PORCELAIN_SECRETS_BACKEND=systemd-creds
+Environment=PORCELAIN_CERTIFICATES_BACKEND=selfsigned
+StateDirectory=porcelain
+# D-Bus and runtime state access
+ReadWritePaths=/var/lib/porcelain /etc/cloudflared
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target

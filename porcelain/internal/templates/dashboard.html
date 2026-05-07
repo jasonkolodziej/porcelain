@@ -1,0 +1,29 @@
+{{ define "content" }}
+<section class="hero">
+  <p class="eyebrow">CoreOS Control Plane</p>
+  <h1>{{ .Title }}</h1>
+  <p class="muted">Socket-activated Go daemon with integrated secret storage and certificate lifecycle scaffolding.</p>
+  <div>
+    <span class="badge">Auth: {{ .Authentication }}</span>
+    <span class="badge">D-Bus: {{ .DBus }}</span>
+    <span class="badge">Secrets: {{ .SecretsBackend }}</span>
+    <span class="badge">Certificates: {{ .CertificatesBackend }}</span>
+    {{ if .Subject }}<span class="badge">Subject: {{ .Subject }}</span>{{ end }}
+  </div>
+  {{ if .Groups }}
+  <div>
+    {{ range .Groups }}<span class="badge">{{ . }}</span>{{ end }}
+  </div>
+  {{ end }}
+</section>
+
+<section class="grid">
+  {{ range .Modules }}
+  <article class="card">
+    <h2>{{ .Name }}</h2>
+    <p class="muted">{{ .Summary }}</p>
+    <p class="status">{{ .Status }}</p>
+  </article>
+  {{ end }}
+</section>
+{{ end }}
