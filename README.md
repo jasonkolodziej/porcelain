@@ -250,13 +250,72 @@ import the developer CA into the browser's trusted roots.
 | Transport | Fiber over HTTPS with mandatory mTLS on every listener | Implemented |
 | mTLS / trust roots | `CertificateStore` and TLS manager boundary | Scaffolded |
 | Authentication | Dex middleware boundary and request claims context | Scaffolded |
-| Authorization | Group claims intended to map to admin/operator roles | Scaffolded |
+| Authorization (read ops) | Group claims intended to map to admin/operator roles | Scaffolded |
+| **Authorization (write ops)** | **OPA-style policy engine integrated with Dex claims + mTLS peer identity** | **Implemented (Phase 3)** |
 | D-Bus | System bus boundary with room for peer credential enforcement | Implemented in boot path |
 | Secrets | `SecretStore` interface with memory and `systemd-creds` backends | Partially implemented |
 | Hardening | systemd service sandboxing and syscall filtering | Scaffolded |
 | External PKI | Vault PKI / cert-manager issuer boundaries | Scaffolded |
 
-The important architectural shift is that secret and certificate handling now sits inside the security model itself rather than appearing as an optional later enhancement.
+The important architectural shift is that secret and certificate handling now sits inside the security model itself rather than appearing as an optional later enhancement. Additionally, **Phase 3 introduces privilege-gated write operations**: every write-oriented action (systemd unit control, network state changes, firewall rules, etc.) flows through an OPA-backed policy decision engine before the D-Bus call is issued. The policy input combines Dex OIDC identity (subject, groups) with mTLS peer metadata (CN, fingerprint) for fine-grained access control.
+
+---
+
+## Authorization and Policy Design (Phase 3)
+
+### Policy Architecture
+
+Porcelain uses an **Open Policy Agent (OPA) integration pattern** for privilege-gated write operations. The authorization model is:
+
+```
+Request with Dex Claims + mTLS Peer Identity
+  ↓
+Policy Input Model:
+  - subject: from Dex OIDC ("user@example.com")
+  - groups: from Dex OIDC (["admins", "infra"])
+  - action: verb + resource (e.g., "write.firewall.zone.service.enable")
+  - resource: target identifier (e.g., "public/http")
+  - peerCN: mTLS peer certificate CN
+  - peerFP: mTLS peer certificate SHA256 fingerprint
+  - authToken: raw OIDC token for future MFA
+  ↓
+OPA Policy Engine:
+  - Built-in policy: deny by default unless admin-group member
+  - Allow/Deny decision + optional reason
+  ↓
+Route Handler:
+  - If Allowed: proceed to D-Bus client method call
+  - If Denied: return 403 Forbidden with reason
+```
+
+### Implementation Details
+
+- **Authorizer Interface:** `internal/policy/authorizer.go` exports an `Authorizer` interface with `Authorize(ctx, input) (Decision, error)`.
+- **Integration Points:** Every write-oriented API route (e.g., `/api/firewall/zones/:zone/services/:service/:state`) calls `authorizeWrite()` before module delegation. The `authorizeWrite()` helper extracts Dex claims and mTLS identity from the Fiber context and queries the authorizer.
+- **Write Clients:** Actual D-Bus method calls live in module-specific write clients:
+  - `internal/dbus/systemd/client_write_*.go`
+  - `internal/dbus/networkmanager/client_write_*.go`
+  - `internal/dbus/firewalld/client_write_*.go`
+  - `internal/dbus/udisks2/client_write_*.go`
+  
+  Each has a `//go:build linux` implementation and a non-Linux stub (`client_write_stub.go`) for safe development on macOS.
+
+- **Future Policy Expansion:** The `Authorizer` interface is designed to accept custom policy files or HTTP-based OPA servers, allowing production deployments to define group-specific resource access without code changes.
+
+### Example: Policy-Gated Firewall Rule Enable
+
+1. User authenticated via Dex with `groups: ["admins"]` and mTLS cert CN = `user-client`.
+2. User clicks "Enable HTTP" in firewall zone UI.
+3. Browser submits: `POST /api/firewall/zones/public/services/http/enable`
+4. Router handler:
+   - Extracts Dex claims and mTLS peer identity from request context
+   - Calls `authorizeWrite(c, authorizer, "firewall.zone.service.enable", "public/http")`
+   - Authorizer queries OPA with input model (subject, groups, action, resource, peer metadata)
+   - OPA policy allows (admin group) → Authorizer returns Decision{Allowed: true}
+5. Route handler proceeds: calls `firewall.Module.SetService(ctx, "public", "http", true)`
+6. Module calls `firewalld.Client.SetService()` via D-Bus
+7. Rule is applied on the host
+8. Response: `{status: "ok"}`
 
 ---
 
@@ -298,28 +357,60 @@ The important architectural shift is that secret and certificate handling now si
     godbus wrapper each, with the systemd `ListUnits` and UDisks2 block-device
     enumeration paths exercised by the storage and diagnostics modules; deeper
     surfaces (rule editing, profile activation) land in subsequent slices.
-  - **done (phase 3 extension):** read + write methods are now exposed across
-    shared clients, with Linux build-constrained write implementations and
-    non-Linux stubs for safe developer builds.
-- policy-gated write operations compatible with Dex identities
-  - **done (phase 3 extension):** write-oriented API routes now flow through an
-    OPA-style authorizer input model (subject, groups, action, resource, mTLS
-    peer metadata), with deny-by-default behavior for non-privileged groups.
+  - **done (phase 3 full):** read + write methods are now exposed across shared
+    clients with `//go:build linux` constraints on write implementations and
+    non-Linux stubs for safe macOS developer builds. Write clients are fully
+    implemented for systemd, NetworkManager, firewalld, and UDisks2 subsystems.
+
+- **Open Policy Agent (OPA) integration for privilege-gated write operations**
+  - **done (phase 3 full):** `internal/policy/authorizer.go` implements an OPA-style
+    authorization engine that integrates Dex OIDC identity (subject, groups, roles)
+    with mTLS peer metadata (CN, fingerprint). Policy decisions are deny-by-default
+    for non-admin-group members. Every write-oriented API route calls `authorizeWrite()`
+    before delegating to the module layer or D-Bus. Example:
+    ```
+    write.network.global.enable + subject + groups + peer identity
+      → OPA policy engine → allow/deny + reason
+    ```
+  - Policy input model captures: user subject (from Dex claims), group membership,
+    action (e.g., `write.firewall.zone.service.enable`), resource identifier,
+    mTLS peer CN and SHA256 fingerprint, and raw auth token for future MFA/TOTP.
+  - Tested via `TestPolicyGatedWriteRoutesWithDexEnabled`: cover happy-path (admin
+    group → allow) and deny-path (non-admin → 403).
+
 - module contract and registry
   - **done:** `internal/modules` defines a `Module` interface + `Registry` so
     each feature owns its own backend wiring while the router only depends on
     the interface; sidebar status badges read from `Module.Status`.
+
 - UDisks2-backed storage workflows for local partitions, encryption, RAID, NFS, and iSCSI
   - **done:** read-only block-device snapshot via UDisks2 with a developer
     fake backend on non-Linux hosts so the storage page renders in macOS dev.
-  - **deferred:** partition creation, LUKS unlock, RAID assembly, NFS, iSCSI.
-- NetworkManager and firewalld integration
-  - **done (phase 3 extension):** `/network` now renders live
-    NetworkManager interface state and supports policy-gated
-    enable/disable operations.
-  - **done (phase 3 extension):** `/network/firewall` now renders live
-    firewalld zone/service state with policy-gated service
-    enable/disable controls.
+  - **deferred:** partition creation, LUKS unlock, RAID assembly, NFS, iSCSI
+    write operations (awaiting Phase 4 storage write action expansion).
+
+- **NetworkManager integration with policy-gated write operations**
+  - **done (phase 3 full):** `/network` page renders live NetworkManager interface
+    state (connections, devices, IP config). Write operations (`/api/network/enabled/:state`)
+    are policy-gated: requires admin group + successful OPA decision before calling
+    `NetworkManager.SetEnabled()` via shared d-bus client.
+  - Supports enable/disable of network at system level; per-interface and per-connection
+    granularity deferred to Phase 4.
+
+- **firewalld integration with policy-gated write operations**
+  - **done (phase 3 full):** `/network/firewall` page renders live firewalld zone
+    and service state. Write operations (`/api/firewall/zones/:zone/services/:service/:state`)
+    are policy-gated: requires admin group + OPA decision before calling
+    `firewalld.SetService()` via shared d-bus client.
+  - Supports enable/disable of services within zones; advanced rule editing and
+    DNAT/port forwarding deferred to Phase 4.
+
+- **systemd and Podman write operations (existing routes, now policy-gated)**
+  - `/api/systemd/units/:name/:action` (start/stop/restart) flows through `authorizeWrite()`
+    before unit action is applied.
+  - `/api/podman/containers/:id/:action` (start/stop/restart) flows through `authorizeWrite()`
+    before container action is applied.
+
 - diagnostics collection and system health surfaces
   - **done:** hostname / uptime / running services derived from systemd.
   - **deferred:** journal capture, rpm-ostree state, bundle export.

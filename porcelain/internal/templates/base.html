@@ -7,6 +7,7 @@
         sidebarPinned: $persist(false),
         darkMode: $persist(true),
         currentModule: '{{ .CurrentModule }}',
+        breadcrumb: '{{ .Title }}',
         toastQueue: [],
         modalOpen: false,
         modalContent: '',
@@ -399,7 +400,9 @@
                 <div class="flex items-center gap-2 text-sm">
                     <span class="text-porcelain-500">Porcelain</span>
                     <svg class="w-4 h-4 text-porcelain-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
-                    <span class="font-medium" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .Title }}</span>
+                    <span class="font-medium"
+                          x-text="breadcrumb"
+                          :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .Title }}</span>
                 </div>
 
                 <!-- Right Actions -->
@@ -476,9 +479,19 @@
         });
 
         document.body.addEventListener('htmx:afterSwap', function(evt) {
-            // Re-initialize any Alpine components in swapped content
+            // Re-initialize any Alpine components in swapped content.
             if (window.Alpine) {
                 Alpine.initTree(evt.detail.target);
+            }
+
+            // Update the fixed-header breadcrumb from the X-Page-Title
+            // response header so HTMX partial swaps stay in sync.
+            const pageTitle = evt.detail.xhr && evt.detail.xhr.getResponseHeader('X-Page-Title');
+            if (pageTitle) {
+                const root = document.querySelector('[x-data]');
+                if (root && root._x_dataStack) {
+                    root._x_dataStack[0].breadcrumb = pageTitle;
+                }
             }
         });
 

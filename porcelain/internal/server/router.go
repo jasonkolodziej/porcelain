@@ -746,6 +746,9 @@ func renderPage(
 			Data:          build(c),
 		}
 
+		// X-Page-Title lets the HTMX afterSwap handler update the breadcrumb
+		// in the fixed header without a full-page reload.
+		c.Set("X-Page-Title", title)
 		c.Type("html")
 
 		w := c.Response().BodyWriter()
