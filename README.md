@@ -285,6 +285,11 @@ The important architectural shift is that secret and certificate handling now si
   certificate, and a developer trust bundle so the UI can be exercised in a
   browser before deployment
 - secret watch and rotation semantics for long-lived runtime state
+- diagnostics bundle export endpoint
+  - **done (initial slice):** `/api/diagnostics/bundle` returns a downloadable
+    tar.gz support bundle containing host snapshot + module health data, and
+    `/diagnostics` now renders a first-class diagnostics page with service and
+    module health tables.
 
 ### Phase 3 — Host Control Modules
 
@@ -293,6 +298,13 @@ The important architectural shift is that secret and certificate handling now si
     godbus wrapper each, with the systemd `ListUnits` and UDisks2 block-device
     enumeration paths exercised by the storage and diagnostics modules; deeper
     surfaces (rule editing, profile activation) land in subsequent slices.
+  - **done (phase 3 extension):** read + write methods are now exposed across
+    shared clients, with Linux build-constrained write implementations and
+    non-Linux stubs for safe developer builds.
+- policy-gated write operations compatible with Dex identities
+  - **done (phase 3 extension):** write-oriented API routes now flow through an
+    OPA-style authorizer input model (subject, groups, action, resource, mTLS
+    peer metadata), with deny-by-default behavior for non-privileged groups.
 - module contract and registry
   - **done:** `internal/modules` defines a `Module` interface + `Registry` so
     each feature owns its own backend wiring while the router only depends on
@@ -301,7 +313,13 @@ The important architectural shift is that secret and certificate handling now si
   - **done:** read-only block-device snapshot via UDisks2 with a developer
     fake backend on non-Linux hosts so the storage page renders in macOS dev.
   - **deferred:** partition creation, LUKS unlock, RAID assembly, NFS, iSCSI.
-- NetworkManager and firewalld integration — *scaffolded clients only*.
+- NetworkManager and firewalld integration
+  - **done (phase 3 extension):** `/network` now renders live
+    NetworkManager interface state and supports policy-gated
+    enable/disable operations.
+  - **done (phase 3 extension):** `/network/firewall` now renders live
+    firewalld zone/service state with policy-gated service
+    enable/disable controls.
 - diagnostics collection and system health surfaces
   - **done:** hostname / uptime / running services derived from systemd.
   - **deferred:** journal capture, rpm-ostree state, bundle export.
@@ -309,9 +327,26 @@ The important architectural shift is that secret and certificate handling now si
 ### Phase 4 — Workload and Edge Integrations
 
 - Podman and Quadlet workflows
+  - **done (initial slice):** `podman` module now probes local Podman runtime,
+    exposes a dedicated `/podman` UI surface, lists containers/images, and
+    supports safe `start/stop/restart` actions through
+    `/api/podman/containers/:id/:action`.
+  - **deferred:** image pull/build, logs/exec/inspect views, Quadlet authoring,
+    and image registry management.
 - ZFS orchestration and event surfaces
+  - **done (initial slice):** `zfs` module probe and dedicated `/storage/zfs`
+    page wiring.
+  - **deferred:** pool operations, scrub orchestration, and event streaming.
 - lm-sensors inventory and telemetry views
+  - **done (phase 2 slice):** `sensors` module now parses `sensors -j`
+    telemetry when available, rendering per-chip readings, high/critical values,
+    and critical highlighting in the dedicated `/sensors` UI.
+  - **deferred:** charting history over time and configurable alert thresholds.
 - Cloudflare tunnel management with encrypted credential handling
+  - **done (initial slice):** `cloudflare` module probe and dedicated
+    `/network/cloudflare` UI route.
+  - **deferred:** tunnel lifecycle, ingress editing, and credential-backed
+    tunnel provisioning.
 
 ### Phase 5 — External Secret and PKI Backends
 

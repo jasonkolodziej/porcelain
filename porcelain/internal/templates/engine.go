@@ -18,6 +18,8 @@ import (
 //go:embed all:*.html modules/*.html static
 var assetFS embed.FS
 
+const placeholderTemplate = "modules/placeholder.html"
+
 // pageEntry maps a logical page name (e.g. "dashboard") to the concrete
 // template file the engine should render alongside base.html.
 type pageEntry struct {
@@ -30,10 +32,13 @@ type pageEntry struct {
 var pages = []pageEntry{
 	{name: "dashboard", file: "dashboard.html"},
 	{name: "storage", file: "modules/storage.html"},
-	{name: "storage-zfs", file: "modules/placeholder.html"},
-	{name: "network", file: "modules/placeholder.html"},
-	{name: "network-firewall", file: "modules/placeholder.html"},
-	{name: "network-cloudflare", file: "modules/placeholder.html"},
+	{name: "storage-zfs", file: placeholderTemplate},
+	{name: "network", file: "modules/network.html"},
+	{name: "network-firewall", file: "modules/firewall.html"},
+	{name: "network-cloudflare", file: placeholderTemplate},
+	{name: "podman", file: "modules/podman.html"},
+	{name: "diagnostics", file: "modules/diagnostics.html"},
+	{name: "sensors", file: "modules/sensors.html"},
 }
 
 // Engine renders pages with a shared base layout and exposes the embedded

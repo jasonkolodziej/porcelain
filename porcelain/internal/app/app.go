@@ -13,6 +13,8 @@ import (
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/diagnostics"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/firewall"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/network"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/podman"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/sensors"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/storage"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/zfs"
 	runtimeSecrets "github.com/jasonkolodziej/porcelain/porcelain/internal/secrets"
@@ -79,7 +81,9 @@ func New(ctx context.Context, cfg config.Config) (*Application, error) {
 	registry.Register(network.NewFromConnection(ctx, dbusManager))
 	registry.Register(firewall.NewFromConnection(ctx, dbusManager))
 	registry.Register(cloudflare.New(ctx))
+	registry.Register(podman.New(ctx))
 	registry.Register(diagnostics.NewFromConnection(ctx, dbusManager))
+	registry.Register(sensors.New(ctx))
 
 	httpServer, err := server.New(cfg, dexAuth, certStore, tlsManager, registry)
 	if err != nil {

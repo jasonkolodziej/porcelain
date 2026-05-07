@@ -5,15 +5,21 @@ package firewall
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	internaldbus "github.com/jasonkolodziej/porcelain/porcelain/internal/dbus"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/dbus/firewalld"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules"
+
+	godbus "github.com/godbus/dbus/v5"
 )
 
 // Module implements modules.Module for the Firewall sub-page under Network.
 type Module struct {
-	mode string
-	note string
+	conn   *godbus.Conn
+	client *firewalld.Client
+	mode   string
+	note   string
 }
 
 // NewFromConnection wires the Module against the system bus and falls back
@@ -29,8 +35,7 @@ func NewFromConnection(ctx context.Context, mgr *internaldbus.ConnectionManager)
 		}
 		return &Module{mode: "fake", note: err.Error()}
 	}
-	_ = conn.Close()
-	return &Module{mode: "firewalld"}
+	return &Module{conn: conn, client: firewalld.New(conn), mode: "firewalld"}
 }
 
 // ID implements modules.Module.
@@ -56,4 +61,25 @@ func (m *Module) Status(_ context.Context) modules.Status {
 }
 
 // Close implements modules.Module.
-func (m *Module) Close() error { return nil }
+func (m *Module) Close() error {
+	if m == nil || m.conn == nil {
+		return nil
+	}
+	return m.conn.Close()
+}
+
+// Summary returns the current firewalld zone/service overview.
+func (m *Module) Summary(ctx context.Context) (firewalld.ZoneSummary, error) {
+	if m == nil || m.client == nil || m.mode != "firewalld" {
+		return firewalld.ZoneSummary{}, fmt.Errorf("firewalld client unavailable")
+	}
+	return m.client.Summary(ctx)
+}
+
+// SetService enables or disables a named service in a zone.
+func (m *Module) SetService(ctx context.Context, zone, service string, enabled bool) error {
+	if m == nil || m.client == nil || m.mode != "firewalld" {
+		return fmt.Errorf("firewalld client unavailable")
+	}
+	return m.client.SetServiceInZone(ctx, zone, service, enabled)
+}

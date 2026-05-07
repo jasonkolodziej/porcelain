@@ -1,0 +1,77 @@
+{{ define "content" }}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight"
+                :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                {{ .Data.Heading }}
+            </h1>
+            <p class="mt-1 text-sm"
+               :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+                {{ .Data.Blurb }}
+            </p>
+        </div>
+        {{ if .Data.StatusBadge }}
+        <span class="self-start text-xs px-2 py-1 rounded-full {{ .Data.StatusBadge.Class }}">
+            {{ .Data.StatusBadge.Text }}
+        </span>
+        {{ end }}
+    </div>
+
+    <div class="rounded-2xl border p-4"
+         :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <div class="flex items-center justify-between gap-3">
+            <p class="text-sm" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">{{ .Data.Detail }}</p>
+            <div class="flex items-center gap-2">
+                <span class="badge {{ if .Data.Enabled }}badge-success{{ else }}badge-warning{{ end }}">
+                    {{ if .Data.Enabled }}enabled{{ else }}disabled{{ end }}
+                </span>
+                <button class="btn btn-secondary btn-sm"
+                        hx-post="/api/network/enabled/true"
+                        hx-swap="none"
+                        @htmx:afterRequest="if ($event.detail.successful) { htmx.ajax('GET', '/network', {target: '#main-content'}); $dispatch('toast', { message: 'Networking enabled', type: 'success' }); }"
+                        @htmx:responseError="$dispatch('toast', { message: 'Enable failed', type: 'error' })">
+                    Enable
+                </button>
+                <button class="btn btn-secondary btn-sm"
+                        hx-post="/api/network/enabled/false"
+                        hx-swap="none"
+                        @htmx:afterRequest="if ($event.detail.successful) { htmx.ajax('GET', '/network', {target: '#main-content'}); $dispatch('toast', { message: 'Networking disabled', type: 'success' }); }"
+                        @htmx:responseError="$dispatch('toast', { message: 'Disable failed', type: 'error' })">
+                    Disable
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <section class="rounded-2xl border p-6"
+             :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">Interfaces</h2>
+            <span class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">{{ len .Data.Devices }} devices</span>
+        </div>
+        {{ if eq (len .Data.Devices) 0 }}
+        <p class="text-sm" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">No network devices available.</p>
+        {{ else }}
+        <div class="space-y-2">
+            {{ range .Data.Devices }}
+            <div class="rounded-lg border px-3 py-2"
+                 :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                <div class="flex items-center justify-between gap-3">
+                    <div class="min-w-0">
+                        <p class="text-sm font-medium truncate" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-900'">{{ .Interface }}</p>
+                        <p class="text-xs font-mono truncate" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">{{ .Path }}</p>
+                    </div>
+                    <span class="badge {{ if eq (lower .State) "activated" }}badge-success{{ else }}badge-warning{{ end }}">{{ .State }}</span>
+                </div>
+                <div class="mt-1 text-xs flex gap-4" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">
+                    <span>type: {{ .Type }}</span>
+                    <span>mac: {{ .MAC }}</span>
+                </div>
+            </div>
+            {{ end }}
+        </div>
+        {{ end }}
+    </section>
+</div>
+{{ end }}

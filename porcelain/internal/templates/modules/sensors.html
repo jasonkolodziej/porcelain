@@ -1,0 +1,61 @@
+{{ define "content" }}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight"
+                :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                {{ .Data.Heading }}
+            </h1>
+            <p class="mt-1 text-sm"
+               :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+                {{ .Data.Blurb }}
+            </p>
+        </div>
+        {{ if .Data.StatusBadge }}
+        <span class="self-start text-xs px-2 py-1 rounded-full {{ .Data.StatusBadge.Class }}">
+            {{ .Data.StatusBadge.Text }}
+        </span>
+        {{ end }}
+    </div>
+
+    <div class="rounded-2xl border p-4"
+         :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <p class="text-sm" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">{{ .Data.Detail }}</p>
+    </div>
+
+    {{ if eq (len .Data.Chips) 0 }}
+    <div class="rounded-2xl border p-6"
+         :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <p class="text-sm" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">No sensor readings available.</p>
+    </div>
+    {{ else }}
+    <div class="space-y-4">
+        {{ range .Data.Chips }}
+        <section class="rounded-2xl border p-4"
+                 :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+            <h2 class="text-lg font-semibold mb-3" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">{{ .Name }}</h2>
+            {{ if eq (len .Readings) 0 }}
+            <p class="text-sm" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">No parseable input readings for this chip.</p>
+            {{ else }}
+            <div class="space-y-2">
+                {{ range .Readings }}
+                <div class="rounded-lg border px-3 py-2"
+                     :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-sm font-medium" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-900'">{{ .Name }}</p>
+                        <span class="font-mono text-sm {{ if .Critical }}text-accent-rose{{ else }}text-accent-cyan{{ end }}">{{ .Value }} {{ .Unit }}</span>
+                    </div>
+                    <div class="mt-1 text-xs flex gap-4" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">
+                        <span>high: {{ if .High }}{{ .High }}{{ else }}—{{ end }}</span>
+                        <span>critical: {{ if .Threshold }}{{ .Threshold }}{{ else }}—{{ end }}</span>
+                    </div>
+                </div>
+                {{ end }}
+            </div>
+            {{ end }}
+        </section>
+        {{ end }}
+    </div>
+    {{ end }}
+</div>
+{{ end }}

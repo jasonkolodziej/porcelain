@@ -1,0 +1,85 @@
+{{ define "content" }}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight"
+                :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                {{ .Data.Heading }}
+            </h1>
+            <p class="mt-1 text-sm"
+               :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+                {{ .Data.Blurb }}
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            {{ if .Data.StatusBadge }}
+            <span class="text-xs px-2 py-1 rounded-full {{ .Data.StatusBadge.Class }}">
+                {{ .Data.StatusBadge.Text }}
+            </span>
+            {{ end }}
+            <a href="{{ .Data.BundlePath }}" class="btn btn-secondary">
+                {{ .Data.BundleButton }}
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="porcelain-card p-4">
+            <p class="text-xs uppercase tracking-wide" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Host</p>
+            <p class="mt-2 text-lg font-semibold" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">{{ .Data.Hostname }}</p>
+        </div>
+        <div class="porcelain-card p-4">
+            <p class="text-xs uppercase tracking-wide" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Kernel</p>
+            <p class="mt-2 text-sm font-mono" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .Data.Kernel }}</p>
+        </div>
+        <div class="porcelain-card p-4">
+            <p class="text-xs uppercase tracking-wide" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Uptime</p>
+            <p class="mt-2 text-sm font-mono" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .Data.Uptime }}</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <section class="rounded-2xl border p-6"
+                 :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-lg font-semibold" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">Services</h2>
+                <span class="text-xs" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+                    {{ .Data.RunningServices }}/{{ .Data.TotalServices }} running
+                </span>
+            </div>
+            <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {{ range .Data.Services }}
+                <div class="flex items-center justify-between rounded-lg border px-3 py-2"
+                     :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                    <div class="min-w-0">
+                        <p class="text-sm font-medium truncate" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-900'">{{ .Name }}</p>
+                        <p class="text-xs truncate" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">{{ .Description }}</p>
+                    </div>
+                    <span class="badge {{ if .Active }}badge-success{{ else }}badge-danger{{ end }}">{{ .Status }}</span>
+                </div>
+                {{ end }}
+                {{ if eq (len .Data.Services) 0 }}
+                <p class="text-sm" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">No service data available.</p>
+                {{ end }}
+            </div>
+        </section>
+
+        <section class="rounded-2xl border p-6"
+                 :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+            <h2 class="text-lg font-semibold mb-3" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">Module Health</h2>
+            <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {{ range .Data.Modules }}
+                <div class="rounded-lg border px-3 py-2" :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                    <div class="flex items-center justify-between gap-3">
+                        <p class="text-sm font-medium" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-900'">{{ .Name }}</p>
+                        <span class="badge {{ if eq .Health "ok" }}badge-success{{ else if eq .Health "degraded" }}badge-warning{{ else }}badge-danger{{ end }}">{{ .Health }}</span>
+                    </div>
+                    <p class="mt-1 text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">{{ .Detail }}</p>
+                </div>
+                {{ end }}
+            </div>
+            <p class="mt-3 text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">{{ .Data.Detail }}</p>
+        </section>
+    </div>
+</div>
+{{ end }}

@@ -6,15 +6,21 @@ package network
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	internaldbus "github.com/jasonkolodziej/porcelain/porcelain/internal/dbus"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/dbus/networkmanager"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules"
+
+	godbus "github.com/godbus/dbus/v5"
 )
 
 // Module implements modules.Module for the Network group landing page.
 type Module struct {
-	mode string
-	note string
+	conn   *godbus.Conn
+	client *networkmanager.Client
+	mode   string
+	note   string
 }
 
 // NewFromConnection returns a Module that prefers the system bus
@@ -30,10 +36,7 @@ func NewFromConnection(ctx context.Context, mgr *internaldbus.ConnectionManager)
 		}
 		return &Module{mode: "fake", note: err.Error()}
 	}
-	// NetworkManager client is wired in a later slice; close the connection
-	// for now to avoid leaking it.
-	_ = conn.Close()
-	return &Module{mode: "networkmanager"}
+	return &Module{conn: conn, client: networkmanager.New(conn), mode: "networkmanager"}
 }
 
 // ID implements modules.Module.
@@ -59,4 +62,25 @@ func (m *Module) Status(_ context.Context) modules.Status {
 }
 
 // Close implements modules.Module.
-func (m *Module) Close() error { return nil }
+func (m *Module) Close() error {
+	if m == nil || m.conn == nil {
+		return nil
+	}
+	return m.conn.Close()
+}
+
+// Devices returns the current NetworkManager device list.
+func (m *Module) Devices(ctx context.Context) ([]networkmanager.Device, error) {
+	if m == nil || m.client == nil || m.mode != "networkmanager" {
+		return nil, fmt.Errorf("networkmanager client unavailable")
+	}
+	return m.client.ListDevices(ctx)
+}
+
+// SetEnabled toggles global networking through NetworkManager.
+func (m *Module) SetEnabled(ctx context.Context, enabled bool) error {
+	if m == nil || m.client == nil || m.mode != "networkmanager" {
+		return fmt.Errorf("networkmanager client unavailable")
+	}
+	return m.client.SetNetworkingEnabled(ctx, enabled)
+}

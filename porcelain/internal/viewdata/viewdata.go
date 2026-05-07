@@ -220,3 +220,127 @@ type PlaceholderData struct {
 	StatusBadge *templates.StatusBadge
 	Children    []templates.ModuleNav
 }
+
+// DiagnosticsPageData backs modules/diagnostics.html.
+type DiagnosticsPageData struct {
+	Heading         string
+	Blurb           string
+	Detail          string
+	Hostname        string
+	Kernel          string
+	OS              string
+	Uptime          string
+	RunningServices int
+	TotalServices   int
+	Services        []DiagnosticsService
+	Modules         []DiagnosticsModuleStatus
+	StatusBadge     *templates.StatusBadge
+	BundlePath      string
+	BundleButton    string
+}
+
+// DiagnosticsService is one service row in the diagnostics page.
+type DiagnosticsService struct {
+	Name        string
+	Description string
+	Status      string
+	Active      bool
+}
+
+// DiagnosticsModuleStatus is one module health row in the diagnostics page.
+type DiagnosticsModuleStatus struct {
+	ID     string
+	Name   string
+	Health string
+	Detail string
+}
+
+// PodmanPageData backs modules/podman.html.
+type PodmanPageData struct {
+	Heading     string
+	Blurb       string
+	Detail      string
+	Containers  []PodmanContainer
+	Images      []PodmanImage
+	StatusBadge *templates.StatusBadge
+}
+
+// PodmanContainer is one container row in the podman page.
+type PodmanContainer struct {
+	ID     string
+	Name   string
+	Image  string
+	State  string
+	Status string
+}
+
+// PodmanImage is one image row in the podman page.
+type PodmanImage struct {
+	Repository string
+	Tag        string
+	ID         string
+	Size       string
+}
+
+// SensorsPageData backs modules/sensors.html.
+type SensorsPageData struct {
+	Heading     string
+	Blurb       string
+	Detail      string
+	Chips       []SensorChip
+	StatusBadge *templates.StatusBadge
+}
+
+// SensorChip is one chip/device section in the sensors page.
+type SensorChip struct {
+	Name     string
+	Readings []SensorReading
+}
+
+// SensorReading is one parsed reading from lm-sensors.
+type SensorReading struct {
+	Name      string
+	Value     string
+	Unit      string
+	Critical  bool
+	Threshold string
+	High      string
+}
+
+// NetworkPageData backs modules/network.html.
+type NetworkPageData struct {
+	Heading     string
+	Blurb       string
+	Detail      string
+	StatusBadge *templates.StatusBadge
+	Enabled     bool
+	Devices     []NetworkDevice
+}
+
+// NetworkDevice is one NetworkManager interface row.
+type NetworkDevice struct {
+	Path      string
+	Interface string
+	Type      string
+	State     string
+	MAC       string
+}
+
+// FirewallPageData backs modules/firewall.html.
+type FirewallPageData struct {
+	Heading          string
+	Blurb            string
+	Detail           string
+	StatusBadge      *templates.StatusBadge
+	DefaultZone      string
+	Zones            []FirewallZone
+	AllKnownServices []string
+}
+
+// FirewallZone is one firewalld zone card.
+type FirewallZone struct {
+	Name       string
+	Default    bool
+	Interfaces []string
+	Services   []string
+}

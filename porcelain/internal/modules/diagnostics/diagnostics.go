@@ -156,6 +156,14 @@ func (m *Module) Capture(ctx context.Context) (Snapshot, error) {
 	return snap, nil
 }
 
+// UnitAction executes a systemd unit action through the shared D-Bus client.
+func (m *Module) UnitAction(ctx context.Context, unitName, action string) error {
+	if m == nil || m.mode != "systemd" || m.client == nil {
+		return fmt.Errorf("diagnostics: systemd client unavailable")
+	}
+	return m.client.UnitAction(ctx, unitName, action)
+}
+
 // readUptime returns the host uptime, falling back to zero on non-Linux.
 func readUptime() time.Duration {
 	raw, err := os.ReadFile("/proc/uptime")

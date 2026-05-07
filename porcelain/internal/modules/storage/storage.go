@@ -121,6 +121,18 @@ func (m *Module) Snapshot(ctx context.Context) (viewdata.StorageData, error) {
 	return data, nil
 }
 
+// FormatBlock formats a UDisks2 block object to the requested filesystem type.
+func (m *Module) FormatBlock(ctx context.Context, objectPath, fsType string) error {
+	if m == nil {
+		return fmt.Errorf("storage: module is nil")
+	}
+	b, ok := m.backend.(*udisks2Backend)
+	if !ok || b == nil || b.client == nil {
+		return fmt.Errorf("storage: udisks2 backend unavailable")
+	}
+	return b.client.FormatBlock(ctx, godbus.ObjectPath(objectPath), fsType)
+}
+
 // udisks2Backend is the real backend backed by org.freedesktop.UDisks2.
 type udisks2Backend struct {
 	conn   *godbus.Conn

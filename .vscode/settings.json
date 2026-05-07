@@ -80,6 +80,7 @@
       "approve": true,
       "matchCommandLine": true
     },
-    "go": true
+    "go": true,
+    "gofmt": true
   }
 }

@@ -1,0 +1,90 @@
+{{ define "content" }}
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight"
+                :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                {{ .Data.Heading }}
+            </h1>
+            <p class="mt-1 text-sm"
+               :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+                {{ .Data.Blurb }}
+            </p>
+        </div>
+        {{ if .Data.StatusBadge }}
+        <span class="self-start text-xs px-2 py-1 rounded-full {{ .Data.StatusBadge.Class }}">
+            {{ .Data.StatusBadge.Text }}
+        </span>
+        {{ end }}
+    </div>
+
+    <div class="rounded-2xl border p-4"
+         :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <p class="text-sm" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'">{{ .Data.Detail }}</p>
+    </div>
+
+    {{ if eq (len .Data.Zones) 0 }}
+    <div class="rounded-2xl border p-6"
+         :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <p class="text-sm" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">No firewalld zones available.</p>
+    </div>
+    {{ else }}
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {{ range .Data.Zones }}
+        <section class="rounded-2xl border p-4"
+                 :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+            {{ $zone := .Name }}
+            <div class="flex items-center justify-between gap-3 mb-3">
+                <h2 class="text-lg font-semibold" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                    {{ .Name }}
+                </h2>
+                <span class="badge {{ if .Default }}badge-success{{ else }}badge-warning{{ end }}">
+                    {{ if .Default }}default{{ else }}zone{{ end }}
+                </span>
+            </div>
+
+            <p class="text-xs mb-3" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">
+                interfaces: {{ if eq (len .Interfaces) 0 }}none{{ else }}{{ range $idx, $iface := .Interfaces }}{{ if $idx }}, {{ end }}{{ $iface }}{{ end }}{{ end }}
+            </p>
+
+            <div class="space-y-2">
+                {{ range .Services }}
+                <div class="flex items-center justify-between rounded-lg border px-3 py-2"
+                     :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                    <span class="text-sm" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-900'">{{ . }}</span>
+                    <button class="btn btn-secondary btn-sm"
+                            hx-post="/api/firewall/zones/{{ $zone }}/services/{{ . }}/disable"
+                            hx-swap="none"
+                            @htmx:afterRequest="if ($event.detail.successful) { htmx.ajax('GET', '/network/firewall', {target: '#main-content'}); $dispatch('toast', { message: 'Service removed', type: 'success' }); }"
+                            @htmx:responseError="$dispatch('toast', { message: 'Policy denied or firewalld failed', type: 'error' })">
+                        Disable
+                    </button>
+                </div>
+                {{ end }}
+                {{ if eq (len .Services) 0 }}
+                <p class="text-sm" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">No services enabled.</p>
+                {{ end }}
+            </div>
+
+            {{ if ne (len $.Data.AllKnownServices) 0 }}
+            <div class="mt-4 pt-3 border-t" :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                <p class="text-xs mb-2" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-500'">Quick add</p>
+                <div class="flex flex-wrap gap-2">
+                    {{ range $.Data.AllKnownServices }}
+                    <button class="btn btn-secondary btn-sm"
+                            hx-post="/api/firewall/zones/{{ $zone }}/services/{{ . }}/enable"
+                            hx-swap="none"
+                            @htmx:afterRequest="if ($event.detail.successful) { htmx.ajax('GET', '/network/firewall', {target: '#main-content'}); $dispatch('toast', { message: 'Service added', type: 'success' }); }"
+                            @htmx:responseError="$dispatch('toast', { message: 'Policy denied or firewalld failed', type: 'error' })">
+                        + {{ . }}
+                    </button>
+                    {{ end }}
+                </div>
+            </div>
+            {{ end }}
+        </section>
+        {{ end }}
+    </div>
+    {{ end }}
+</div>
+{{ end }}
