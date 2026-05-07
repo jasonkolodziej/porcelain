@@ -1,6 +1,325 @@
-{{ define "storage-module" }}
+<!-- {{ define "storage-module" }}
 <section>
   <h2>Storage</h2>
   <p>This placeholder keeps the scaffold ready for UDisks2, ZFS, and encrypted volume templates.</p>
 </section>
+{{ end }} -->
+
+<!-- internal/templates/modules/storage.html -->
+{{ define "content" }}
+<div class="space-y-6" x-data="{
+    viewMode: $persist('grid'),
+    selectedPool: null,
+    showCreatePool: false
+}">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                Storage
+            </h1>
+            <p class="mt-1 text-sm" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+                {{ len .Data.Pools }} ZFS pools, {{ len .Data.BlockDevices }} block devices
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <!-- View Toggle -->
+            <div class="flex rounded-lg border overflow-hidden" :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                <button @click="viewMode = 'grid'"
+                        class="px-3 py-1.5 text-sm transition-colors"
+                        :class="viewMode === 'grid'
+                            ? (darkMode ? 'bg-porcelain-800 text-porcelain-200' : 'bg-porcelain-100 text-porcelain-800')
+                            : (darkMode ? 'text-porcelain-500 hover:bg-porcelain-800/50' : 'text-porcelain-500 hover:bg-porcelain-50')">
+                    Grid
+                </button>
+                <button @click="viewMode = 'list'"
+                        class="px-3 py-1.5 text-sm transition-colors"
+                        :class="viewMode === 'list'
+                            ? (darkMode ? 'bg-porcelain-800 text-porcelain-200' : 'bg-porcelain-100 text-porcelain-800')
+                            : (darkMode ? 'text-porcelain-500 hover:bg-porcelain-800/50' : 'text-porcelain-500 hover:bg-porcelain-50')">
+                    List
+                </button>
+            </div>
+
+            <button @click="showCreatePool = true"
+                    class="btn btn-primary">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                </svg>
+                Create Pool
+            </button>
+        </div>
+    </div>
+
+    <!-- Create Pool Modal -->
+    <div x-show="showCreatePool"
+         x-transition
+         class="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+         @click="showCreatePool = false">
+        <div class="w-full max-w-lg rounded-2xl border shadow-2xl p-6"
+             :class="darkMode ? 'bg-porcelain-900 border-porcelain-800' : 'bg-white border-porcelain-200'"
+             @click.stop>
+            <h3 class="text-xl font-semibold mb-4" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                Create ZFS Pool
+            </h3>
+            <form hx-post="/api/zfs/pools"
+                  hx-target="#zfs-pools"
+                  hx-swap="beforeend"
+                  @htmx:afterRequest="showCreatePool = false; $dispatch('toast', { message: 'Pool created', type: 'success' })">
+                <div class="form-grid">
+                    <div class="form-full">
+                        <label class="block text-sm font-medium mb-1" :class="darkMode ? 'text-porcelain-300' : 'text-porcelain-700'">Pool Name</label>
+                        <input type="text" name="name" required placeholder="tank" class="porcelain-input">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1" :class="darkMode ? 'text-porcelain-300' : 'text-porcelain-700'">RAID Level</label>
+                        <select name="raid" class="porcelain-input">
+                            <option value="">Stripe (no redundancy)</option>
+                            <option value="mirror">Mirror</option>
+                            <option value="raidz1">RAIDZ1</option>
+                            <option value="raidz2">RAIDZ2</option>
+                            <option value="raidz3">RAIDZ3</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1" :class="darkMode ? 'text-porcelain-300' : 'text-porcelain-700'">Compression</label>
+                        <select name="compression" class="porcelain-input">
+                            <option value="on">LZ4 (default)</option>
+                            <option value="gzip">GZIP</option>
+                            <option value="zstd">ZSTD</option>
+                            <option value="off">Off</option>
+                        </select>
+                    </div>
+                    <div class="form-full">
+                        <label class="block text-sm font-medium mb-1" :class="darkMode ? 'text-porcelain-300' : 'text-porcelain-700'">Devices</label>
+                        <div class="space-y-2 max-h-48 overflow-y-auto p-2 rounded-lg border"
+                             :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                            {{ range .Data.AvailableDevices }}
+                            <label class="flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors"
+                                   :class="darkMode ? 'hover:bg-porcelain-800' : 'hover:bg-porcelain-50'">
+                                <input type="checkbox" name="devices" value="{{ .Path }}" class="porcelain-toggle">
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium font-mono" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .Path }}</p>
+                                    <p class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">{{ humanizeBytes .Size }} — {{ .Model }}</p>
+                                </div>
+                            </label>
+                            {{ end }}
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" @click="showCreatePool = false" class="btn btn-ghost">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Pool</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ZFS Pools -->
+    <section>
+        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">
+            <svg class="w-5 h-5 text-accent-emerald" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+            </svg>
+            ZFS Pools
+        </h2>
+
+        <div id="zfs-pools" class="grid gap-4" :class="viewMode === 'grid' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'">
+            {{ range .Data.Pools }}
+            <div class="porcelain-card p-6 group relative overflow-hidden"
+                 @click="selectedPool = selectedPool === '{{ .Name }}' ? null : '{{ .Name }}'"
+                 :class="selectedPool === '{{ .Name }}' ? 'ring-2 ring-accent-cyan' : ''">
+
+                <!-- Pool Header -->
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-emerald to-accent-teal flex items-center justify-center shadow-lg shadow-accent-emerald/20">
+                            <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">{{ .Name }}</h3>
+                            <div class="flex items-center gap-2 mt-0.5">
+                                <span class="badge" :class=".Health === 'ONLINE' ? 'badge-success' : 'badge-danger'">
+                                    {{ .Health }}
+                                </span>
+                                <span class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">{{ .RaidType }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-2xl font-bold font-mono" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                            {{ percentageString .Allocated .Size }}%
+                        </p>
+                        <p class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">used</p>
+                    </div>
+                </div>
+
+                <!-- Capacity Bar -->
+                <div class="mb-4">
+                    <div class="h-3 rounded-full overflow-hidden" :class="darkMode ? 'bg-porcelain-800' : 'bg-porcelain-100'">
+                        <div class="h-full rounded-full transition-all duration-700 relative overflow-hidden"
+                             :class=".Allocated > .Size * 0.9 ? 'bg-gradient-to-r from-accent-amber to-accent-rose' : 'bg-gradient-to-r from-accent-emerald to-accent-cyan'"
+                             style="width: {{ percentageString .Allocated .Size }}%">
+                            <div class="absolute inset-0 animate-shimmer"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between mt-1 text-xs font-mono" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">
+                        <span>{{ humanizeBytes .Allocated }}</span>
+                        <span>{{ humanizeBytes .Size }}</span>
+                    </div>
+                </div>
+
+                <!-- Pool Details (expandable) -->
+                <div x-show="selectedPool === '{{ .Name }}'"
+                     x-transition
+                     class="border-t pt-4 mt-4"
+                     :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <p class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">Compression Ratio</p>
+                            <p class="font-mono text-sm font-medium" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .CompressionRatio }}x</p>
+                        </div>
+                        <div>
+                            <p class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">Deduplication</p>
+                            <p class="font-mono text-sm font-medium" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .Deduplication }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">Scrub Status</p>
+                            <p class="font-mono text-sm font-medium" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .ScrubStatus }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">Last Scrub</p>
+                            <p class="font-mono text-sm font-medium" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .LastScrub }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Datasets -->
+                    <div class="space-y-2">
+                        <p class="text-xs font-semibold uppercase tracking-wider" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">Datasets</p>
+                        {{ range .Datasets }}
+                        <div class="flex items-center justify-between p-2 rounded-lg text-sm"
+                             :class="darkMode ? 'bg-porcelain-800/50' : 'bg-porcelain-50'">
+                            <span class="font-mono" :class="darkMode ? 'text-porcelain-300' : 'text-porcelain-700'">{{ .Name }}</span>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">{{ humanizeBytes .Used }} / {{ humanizeBytes .Available }}</span>
+                                <div class="w-16 h-1.5 rounded-full overflow-hidden" :class="darkMode ? 'bg-porcelain-700' : 'bg-porcelain-200'">
+                                    <div class="h-full bg-accent-cyan rounded-full" style="width: {{ percentageString .Used .Available }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        {{ end }}
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="flex gap-2 mt-4 pt-4 border-t" :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+                        <button class="btn btn-sm btn-secondary"
+                                hx-post="/api/zfs/pools/{{ .Name }}/scrub"
+                                hx-confirm="Start scrub on {{ .Name }}?"
+                                @htmx:afterRequest="$dispatch('toast', { message: 'Scrub started', type: 'info' })">
+                            Scrub
+                        </button>
+                        <button class="btn btn-sm btn-secondary"
+                                hx-post="/api/zfs/pools/{{ .Name }}/snapshot"
+                                @htmx:afterRequest="$dispatch('toast', { message: 'Snapshot created', type: 'success' })">
+                            Snapshot
+                        </button>
+                        <button class="btn btn-sm btn-danger ml-auto"
+                                hx-delete="/api/zfs/pools/{{ .Name }}"
+                                hx-confirm="DESTROY pool {{ .Name }}? This cannot be undone."
+                                @htmx:afterRequest="window.location.reload()">
+                            Destroy
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Hover Glow -->
+                <div class="absolute -bottom-8 -right-8 w-32 h-32 rounded-full blur-3xl opacity-0 group-hover:opacity-20 transition-opacity duration-500 bg-accent-emerald"></div>
+            </div>
+            {{ end }}
+        </div>
+    </section>
+
+    <!-- Block Devices -->
+    <section>
+        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">
+            <svg class="w-5 h-5 text-accent-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.072 0 2.002.556 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 0h-13.5"/>
+            </svg>
+            Block Devices
+        </h2>
+
+        <div class="porcelain-card overflow-hidden">
+            <table class="porcelain-table w-full">
+                <thead>
+                    <tr>
+                        <th>Device</th>
+                        <th>Model</th>
+                        <th>Size</th>
+                        <th>Type</th>
+                        <th>Filesystem</th>
+                        <th>Encrypted</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{ range .Data.BlockDevices }}
+                    <tr>
+                        <td class="font-mono text-sm">{{ .Device }}</td>
+                        <td class="text-sm">{{ .Model }}</td>
+                        <td class="font-mono text-sm">{{ humanizeBytes .Size }}</td>
+                        <td>
+                            <span class="badge badge-info">{{ .Type }}</span>
+                        </td>
+                        <td>
+                            {{ if .Filesystem }}
+                            <span class="text-sm font-mono" :class="darkMode ? 'text-porcelain-300' : 'text-porcelain-700'">{{ .Filesystem }}</span>
+                            {{ else }}
+                            <span class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">unformatted</span>
+                            {{ end }}
+                        </td>
+                        <td>
+                            {{ if .IsEncrypted }}
+                            <span class="flex items-center gap-1 text-accent-emerald text-sm">
+                                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/>
+                                </svg>
+                                {{ .EncryptionType }}
+                            </span>
+                            {{ else }}
+                            <span class="text-sm" :class="darkMode ? 'text-porcelain-600' : 'text-porcelain-400'">—</span>
+                            {{ end }}
+                        </td>
+                        <td>
+                            <div class="flex items-center gap-1">
+                                <button class="p-1.5 rounded-lg transition-colors"
+                                        :class="darkMode ? 'hover:bg-porcelain-800 text-porcelain-400' : 'hover:bg-porcelain-100 text-porcelain-600'"
+                                        title="Format"
+                                        hx-get="/api/storage/devices/{{ .Device }}/format"
+                                        hx-target="#modal-content">
+                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z"/>
+                                    </svg>
+                                </button>
+                                {{ if .IsEncrypted }}
+                                <button class="p-1.5 rounded-lg transition-colors"
+                                        :class="darkMode ? 'hover:bg-porcelain-800 text-porcelain-400' : 'hover:bg-porcelain-100 text-porcelain-600'"
+                                        title="Unlock"
+                                        hx-post="/api/storage/devices/{{ .Device }}/unlock">
+                                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"/>
+                                    </svg>
+                                </button>
+                                {{ end }}
+                            </div>
+                        </td>
+                    </tr>
+                    {{ end }}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
 {{ end }}

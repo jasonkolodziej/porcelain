@@ -2,7 +2,10 @@ module github.com/jasonkolodziej/porcelain/porcelain
 
 go 1.25.0
 
-require github.com/gofiber/fiber/v3 v3.0.0-rc.2
+require (
+	github.com/godbus/dbus/v5 v5.2.2
+	github.com/gofiber/fiber/v3 v3.0.0-rc.2
+)
 
 require (
 	github.com/andybalholm/brotli v1.2.0 // indirect

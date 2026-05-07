@@ -11,6 +11,7 @@ import (
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/auth"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/certmanager"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/config"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules"
 	secretspkg "github.com/jasonkolodziej/porcelain/porcelain/pkg/secrets"
 )
 
@@ -22,8 +23,8 @@ type Server struct {
 }
 
 // New assembles the Fiber server, route set, and mandatory mTLS listener policy.
-func New(cfg config.Config, dexAuth *auth.DexAuth, certStore secretspkg.CertificateStore, tlsManager *certmanager.TLSManager) (*Server, error) {
-	app, err := NewRouter(cfg, dexAuth)
+func New(cfg config.Config, dexAuth *auth.DexAuth, certStore secretspkg.CertificateStore, tlsManager *certmanager.TLSManager, registry *modules.Registry) (*Server, error) {
+	app, err := NewRouter(cfg, dexAuth, registry)
 	if err != nil {
 		return nil, err
 	}

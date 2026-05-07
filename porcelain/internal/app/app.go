@@ -8,6 +8,9 @@ import (
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/certmanager"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/config"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/dbus"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/diagnostics"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules/storage"
 	runtimeSecrets "github.com/jasonkolodziej/porcelain/porcelain/internal/secrets"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/server"
 	secretspkg "github.com/jasonkolodziej/porcelain/porcelain/pkg/secrets"
@@ -21,6 +24,7 @@ type Application struct {
 	CertStore   secretspkg.CertificateStore
 	TLSManager  *certmanager.TLSManager
 	Auth        *auth.DexAuth
+	Modules     *modules.Registry
 	Server      *server.Server
 }
 
@@ -64,7 +68,12 @@ func New(ctx context.Context, cfg config.Config) (*Application, error) {
 	}
 
 	dexAuth := auth.NewDexAuth(cfg.Auth, secretStore)
-	httpServer, err := server.New(cfg, dexAuth, certStore, tlsManager)
+
+	registry := modules.NewRegistry()
+	registry.Register(storage.NewFromConnection(ctx, dbusManager))
+	registry.Register(diagnostics.NewFromConnection(ctx, dbusManager))
+
+	httpServer, err := server.New(cfg, dexAuth, certStore, tlsManager, registry)
 	if err != nil {
 		return nil, fmt.Errorf("create server: %w", err)
 	}
@@ -76,6 +85,7 @@ func New(ctx context.Context, cfg config.Config) (*Application, error) {
 		CertStore:   certStore,
 		TLSManager:  tlsManager,
 		Auth:        dexAuth,
+		Modules:     registry,
 		Server:      httpServer,
 	}, nil
 }

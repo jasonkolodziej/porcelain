@@ -1,0 +1,274 @@
+/* static/css/utilities.css */
+/* ============================================
+   UTILITY CLASSES & ANIMATIONS
+   ============================================ */
+
+/* --- Animations --- */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes ping {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-spin-slow {
+  animation: spin 3s linear infinite;
+}
+
+.animate-ping-slow {
+  animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* --- Glassmorphism --- */
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.dark .glass {
+  background: rgba(15, 23, 42, 0.4);
+  border-color: rgba(255, 255, 255, 0.05);
+}
+
+.glass-strong {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.dark .glass-strong {
+  background: rgba(15, 23, 42, 0.7);
+}
+
+/* --- Gradient Text --- */
+.gradient-text {
+  background: linear-gradient(135deg, var(--accent-cyan), var(--accent-teal));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-animated {
+  background: linear-gradient(90deg, var(--accent-cyan), var(--accent-teal), var(--accent-emerald), var(--accent-cyan));
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s linear infinite;
+}
+
+/* --- Status Indicators --- */
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  position: relative;
+}
+
+.status-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.status-dot-online {
+  background: var(--accent-emerald);
+}
+
+.status-dot-online::after {
+  background: var(--accent-emerald);
+}
+
+.status-dot-offline {
+  background: var(--accent-rose);
+}
+
+.status-dot-offline::after {
+  background: var(--accent-rose);
+}
+
+.status-dot-warning {
+  background: var(--accent-amber);
+}
+
+.status-dot-warning::after {
+  background: var(--accent-amber);
+}
+
+/* --- Loading Skeleton --- */
+.skeleton {
+  background: linear-gradient(90deg, var(--porcelain-200) 25%, var(--porcelain-300) 50%, var(--porcelain-200) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+.dark .skeleton {
+  background: linear-gradient(90deg, var(--porcelain-800) 25%, var(--porcelain-700) 50%, var(--porcelain-800) 75%);
+}
+
+/* --- Scroll Shadows --- */
+.scroll-shadow {
+  position: relative;
+}
+
+.scroll-shadow::before,
+.scroll-shadow::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2rem;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.scroll-shadow::before {
+  top: 0;
+  background: linear-gradient(to bottom, var(--porcelain-50), transparent);
+}
+
+.scroll-shadow::after {
+  bottom: 0;
+  background: linear-gradient(to top, var(--porcelain-50), transparent);
+}
+
+.dark .scroll-shadow::before {
+  background: linear-gradient(to bottom, var(--porcelain-950), transparent);
+}
+
+.dark .scroll-shadow::after {
+  background: linear-gradient(to top, var(--porcelain-950), transparent);
+}
+
+/* --- Truncate with Tooltip --- */
+.truncate-tooltip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Focus Ring --- */
+.focus-ring:focus-visible {
+  outline: none;
+  ring: 2px;
+  ring-color: var(--accent-cyan);
+  ring-offset: 2px;
+  ring-offset-color: var(--porcelain-50);
+}
+
+.dark .focus-ring:focus-visible {
+  ring-offset-color: var(--porcelain-950);
+}
+
+/* --- Hover Lift --- */
+.hover-lift {
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* --- Code Block --- */
+.code-block {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--porcelain-950);
+  color: var(--porcelain-300);
+  overflow-x: auto;
+  border: 1px solid var(--porcelain-800);
+}
+
+.code-block .keyword { color: var(--accent-violet); }
+.code-block .string { color: var(--accent-emerald); }
+.code-block .number { color: var(--accent-amber); }
+.code-block .comment { color: var(--porcelain-500); font-style: italic; }
+.code-block .function { color: var(--accent-cyan); }
+
+/* --- Empty State --- */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.empty-state-icon {
+  width: 4rem;
+  height: 4rem;
+  border-radius: var(--radius-xl);
+  background: var(--porcelain-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+}
+
+.dark .empty-state-icon {
+  background: var(--porcelain-800);
+}
+
+.empty-state-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--porcelain-700);
+  margin-bottom: var(--space-2);
+}
+
+.dark .empty-state-title {
+  color: var(--porcelain-300);
+}
+
+.empty-state-desc {
+  font-size: 0.875rem;
+  color: var(--porcelain-500);
+  max-width: 20rem;
+}
+
+/* --- Divider with Text --- */
+.divider-text {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--porcelain-400);
+  font-size: 0.875rem;
+}
+
+.divider-text::before,
+.divider-text::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--porcelain-200);
+}
+
+.dark .divider-text::before,
+.dark .divider-text::after {
+  background: var(--porcelain-800);
+}

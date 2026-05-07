@@ -31,6 +31,42 @@ The CA certificate (`/pki/ca/ca.crt`) can be imported into the browser's
 trusted roots if you would prefer the address bar to stop warning about an
 unknown server certificate. Both flows still require a valid client cert.
 
+### macOS
+
+Safari and Chrome read the login keychain — Firefox keeps its own NSS database.
+
+```sh
+# Pull the bundle and the CA out of the container.
+docker compose cp porcelain:/pki/client/client.p12 ./client.p12
+docker compose cp porcelain:/pki/ca/ca.crt ./porcelain-dev-ca.crt
+
+# Import the client identity into the login keychain (Safari/Chrome).
+security import ./client.p12 \
+  -k ~/Library/Keychains/login.keychain-db \
+  -P porcelain \
+  -T /Applications/Safari.app \
+  -T "/Applications/Google Chrome.app"
+
+# Trust the dev CA system-wide so the address bar stops warning.
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain ./porcelain-dev-ca.crt
+```
+
+For Firefox: *Settings → Privacy & Security → Certificates → View Certificates*,
+import `client.p12` under *Your Certificates* and `porcelain-dev-ca.crt` under
+*Authorities* (check "Trust this CA to identify websites").
+
+For curl / scripted access:
+
+```sh
+curl --cert-type P12 --cert ./client.p12:porcelain \
+     --cacert ./porcelain-dev-ca.crt \
+     https://localhost:8443/healthz
+```
+
+To remove later, open *Keychain Access*, delete the `porcelain-dev-client`
+identity from *login*, and the dev CA from *System*.
+
 ## Regenerate developer PKI
 
 ```sh

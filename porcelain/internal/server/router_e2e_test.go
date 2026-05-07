@@ -35,7 +35,7 @@ func TestEndToEndMTLS(t *testing.T) {
 	}
 
 	dexAuth := auth.NewDexAuth(cfg.Auth, nil)
-	app, err := server.NewRouter(cfg, dexAuth)
+	app, err := server.NewRouter(cfg, dexAuth, nil)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}

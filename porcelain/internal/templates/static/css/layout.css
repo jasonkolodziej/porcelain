@@ -1,0 +1,54 @@
+/* static/css/layout.css */
+/* ============================================
+   PAGE LAYOUT PRIMITIVES
+   Sidebar/topbar shells live in base.html via
+   Tailwind utilities; this file owns the higher
+   level grid scaffolds the modules reuse.
+   ============================================ */
+
+/* Stat card row used on dashboard.html */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+}
+
+/* Two-column dashboard split. Stacks on small screens. */
+.content-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-6);
+}
+
+@media (min-width: 1024px) {
+  .content-split {
+    grid-template-columns: 2fr 1fr;
+  }
+}
+
+/* Generic full-bleed module container with comfortable padding. */
+.module-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* Sticky module sub-header used by storage and similar modules. */
+.module-toolbar {
+  position: sticky;
+  top: 4rem;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--porcelain-200);
+  background: var(--porcelain-50);
+}
+
+.dark .module-toolbar {
+  border-color: var(--porcelain-800);
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(12px);
+}

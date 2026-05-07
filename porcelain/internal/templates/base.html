@@ -1,90 +1,387 @@
+<!-- internal/templates/base.html -->
 {{ define "base" }}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en"
+      x-data="{
+        sidebarOpen: false,
+        sidebarPinned: $persist(false),
+        darkMode: $persist(true),
+        currentModule: '{{ .CurrentModule }}',
+        toastQueue: [],
+        modalOpen: false,
+        modalContent: '',
+        wsConnected: false
+      }"
+      x-init="
+        darkMode = localStorage.getItem('porcelain_dark') !== 'false';
+        sidebarPinned = JSON.parse(localStorage.getItem('porcelain_sidebar_pinned') || 'false');
+        $watch('darkMode', v => localStorage.setItem('porcelain_dark', v));
+        $watch('sidebarPinned', v => localStorage.setItem('porcelain_sidebar_pinned', v));
+      "
+      :class="{ 'dark': darkMode }"
+      @keydown.escape.window="modalOpen = false"
+      @ws-connected.window="wsConnected = true"
+      @ws-disconnected.window="wsConnected = false"
+      @toast.window="
+        const id = Date.now();
+        toastQueue.push({ id, message: $event.detail.message, type: $event.detail.type || 'info', duration: $event.detail.duration || 4000 });
+        setTimeout(() => toastQueue = toastQueue.filter(t => t.id !== id), $event.detail.duration || 4000);
+      ">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ .Title }}</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #0d1117;
-      --panel: #161b22;
-      --line: #30363d;
-      --text: #e6edf3;
-      --muted: #8b949e;
-      --accent: #58a6ff;
-      --good: #3fb950;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ if .Title }}{{ .Title }} — {{ end }}Porcelain</title>
 
-    body {
-      margin: 0;
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top right, rgba(88, 166, 255, 0.18), transparent 32%), var(--bg);
-      color: var(--text);
-    }
+    <!-- Tailwind CDN (can be replaced with local build) -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-    .shell {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 2rem;
-    }
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
+    <script src="https://unpkg.com/htmx.org/dist/ext/loading-states.js"></script>
 
-    .hero,
-    .card {
-      background: rgba(22, 27, 34, 0.92);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.24);
-    }
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
 
-    .hero {
-      padding: 1.5rem;
-      margin-bottom: 1.5rem;
-    }
+    <!-- Alpine Persist Plugin -->
+    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.14.3/dist/cdn.min.js"></script>
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 1rem;
-    }
+    <!-- External Stylesheets - CUSTOMIZE THESE -->
+    <link rel="stylesheet" href="/static/css/variables.css">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    <link rel="stylesheet" href="/static/css/utilities.css">
 
-    .card {
-      padding: 1rem;
-    }
+    <!-- Module-specific styles (injected by handler) -->
+    {{ range .ModuleStylesheets }}
+    <link rel="stylesheet" href="{{ . }}">
+    {{ end }}
 
-    .eyebrow {
-      color: var(--accent);
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      font-size: 0.75rem;
-    }
+    <!-- Tailwind Config Override -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        porcelain: {
+                            50:  'var(--porcelain-50)',
+                            100: 'var(--porcelain-100)',
+                            200: 'var(--porcelain-200)',
+                            300: 'var(--porcelain-300)',
+                            400: 'var(--porcelain-400)',
+                            500: 'var(--porcelain-500)',
+                            600: 'var(--porcelain-600)',
+                            700: 'var(--porcelain-700)',
+                            800: 'var(--porcelain-800)',
+                            900: 'var(--porcelain-900)',
+                            950: 'var(--porcelain-950)',
+                        },
+                        accent: {
+                            cyan:    'var(--accent-cyan)',
+                            teal:    'var(--accent-teal)',
+                            emerald: 'var(--accent-emerald)',
+                            amber:   'var(--accent-amber)',
+                            rose:    'var(--accent-rose)',
+                            violet:  'var(--accent-violet)',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+                        mono: ['var(--font-mono)', 'ui-monospace', 'monospace'],
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                        'slide-in': 'slideIn 0.3s ease-out',
+                        'fade-in': 'fadeIn 0.2s ease-out',
+                    },
+                    keyframes: {
+                        glow: {
+                            '0%': { boxShadow: '0 0 5px var(--glow-color)' },
+                            '100%': { boxShadow: '0 0 20px var(--glow-color), 0 0 40px var(--glow-color)' },
+                        },
+                        slideIn: {
+                            '0%': { transform: 'translateX(-100%)', opacity: '0' },
+                            '100%': { transform: 'translateX(0)', opacity: '1' },
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(-10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                    }
+                }
+            }
+        }
+    </script>
 
-    .muted {
-      color: var(--muted);
-    }
-
-    .badge {
-      display: inline-block;
-      margin-right: 0.5rem;
-      margin-top: 0.5rem;
-      padding: 0.2rem 0.55rem;
-      border-radius: 999px;
-      border: 1px solid var(--line);
-      color: var(--muted);
-      font-size: 0.85rem;
-    }
-
-    .status {
-      color: var(--good);
-      font-size: 0.85rem;
-    }
-  </style>
+    <style>
+        /* Critical inline styles for FOUC prevention */
+        html.dark { background-color: #020617; }
+        html:not(.dark) { background-color: #f8fafc; }
+    </style>
 </head>
-<body>
-  <main class="shell">
-    {{ template "content" . }}
-  </main>
+
+<body class="font-sans antialiased transition-colors duration-300"
+      :class="darkMode ? 'bg-porcelain-950 text-porcelain-100' : 'bg-porcelain-50 text-porcelain-900'">
+
+    <!-- Toast Container -->
+    <div class="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none"
+         x-show="toastQueue.length > 0"
+         x-transition>
+        <template x-for="toast in toastQueue" :key="toast.id">
+            <div class="pointer-events-auto px-4 py-3 rounded-lg shadow-xl border backdrop-blur-md max-w-sm animate-fade-in"
+                 :class="{
+                    'bg-emerald-500/10 border-emerald-500/30 text-emerald-400': toast.type === 'success',
+                    'bg-rose-500/10 border-rose-500/30 text-rose-400': toast.type === 'error',
+                    'bg-amber-500/10 border-amber-500/30 text-amber-400': toast.type === 'warning',
+                    'bg-cyan-500/10 border-cyan-500/30 text-cyan-400': toast.type === 'info',
+                 }"
+                 @click="toastQueue = toastQueue.filter(t => t.id !== toast.id)">
+                <div class="flex items-center gap-2">
+                    <span x-show="toast.type === 'success'" class="text-lg">✓</span>
+                    <span x-show="toast.type === 'error'" class="text-lg">✕</span>
+                    <span x-show="toast.type === 'warning'" class="text-lg">⚠</span>
+                    <span x-show="toast.type === 'info'" class="text-lg">ℹ</span>
+                    <span x-text="toast.message" class="text-sm font-medium"></span>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div x-show="modalOpen"
+         class="fixed inset-0 z-[90] bg-black/60 backdrop-blur-sm"
+         x-transition.opacity
+         @click="modalOpen = false">
+        <div class="fixed inset-0 flex items-center justify-center p-4"
+             @click.stop>
+            <div class="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border shadow-2xl"
+                 :class="darkMode ? 'bg-porcelain-900 border-porcelain-800' : 'bg-white border-porcelain-200'"
+                 x-html="modalContent"
+                 x-transition.scale>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar"
+           class="fixed left-0 top-0 h-full z-40 transition-all duration-300 ease-out border-r"
+           :class="[
+             darkMode ? 'bg-porcelain-900/80 border-porcelain-800' : 'bg-white/80 border-porcelain-200',
+             sidebarPinned || sidebarOpen ? 'w-64 translate-x-0' : 'w-64 -translate-x-full lg:translate-x-0 lg:w-20 lg:hover:w-64',
+             'backdrop-blur-xl'
+           ]"
+           @mouseenter="if (!sidebarPinned) sidebarOpen = true"
+           @mouseleave="if (!sidebarPinned) sidebarOpen = false">
+
+        <!-- Logo Area -->
+        <div class="h-16 flex items-center px-4 border-b"
+             :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+            <div class="flex items-center gap-3 overflow-hidden whitespace-nowrap">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-cyan to-accent-teal flex items-center justify-center flex-shrink-0 shadow-lg shadow-accent-cyan/20">
+                    <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+                    </svg>
+                </div>
+                <span class="text-xl font-bold bg-gradient-to-r from-accent-cyan to-accent-teal bg-clip-text text-transparent transition-opacity duration-200"
+                      :class="(sidebarPinned || sidebarOpen) ? 'opacity-100' : 'lg:opacity-0'">
+                    Porcelain
+                </span>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="p-3 space-y-1 overflow-y-auto" style="height: calc(100vh - 8rem);">
+            {{ range .Modules }}
+            <a href="{{ .Path }}"
+               class="group flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative overflow-hidden"
+               :class="[
+                 currentModule === '{{ .ID }}'
+                   ? (darkMode ? 'bg-accent-cyan/10 text-accent-cyan border border-accent-cyan/20' : 'bg-accent-cyan/5 text-accent-cyan border border-accent-cyan/20')
+                   : (darkMode ? 'text-porcelain-400 hover:bg-porcelain-800/50 hover:text-porcelain-200' : 'text-porcelain-600 hover:bg-porcelain-100 hover:text-porcelain-900'),
+                 (sidebarPinned || sidebarOpen) ? '' : 'lg:justify-center'
+               ]"
+               hx-get="{{ .Path }}"
+               hx-target="#main-content"
+               hx-push-url="true"
+               hx-indicator="#nav-indicator-{{ .ID }}"
+               @click="currentModule = '{{ .ID }}'">
+
+                <!-- Active Indicator -->
+                <div x-show="currentModule === '{{ .ID }}'"
+                     class="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 rounded-r-full bg-accent-cyan"
+                     x-transition></div>
+
+                <!-- Icon -->
+                <div class="relative flex-shrink-0 w-5 h-5">
+                    {{ .IconSVG }}
+                    <div x-show="currentModule === '{{ .ID }}'"
+                         class="absolute inset-0 animate-pulse-slow bg-accent-cyan/20 rounded-full blur-md"></div>
+                </div>
+
+                <!-- Label -->
+                <span class="text-sm font-medium whitespace-nowrap transition-all duration-200"
+                      :class="(sidebarPinned || sidebarOpen) ? 'opacity-100 w-auto' : 'lg:opacity-0 lg:w-0 lg:overflow-hidden'">
+                    {{ .Name }}
+                </span>
+
+                <!-- Status Badge -->
+                {{ if .StatusBadge }}
+                <span class="ml-auto text-xs px-1.5 py-0.5 rounded-full flex-shrink-0"
+                      :class="(sidebarPinned || sidebarOpen) ? 'opacity-100' : 'lg:opacity-0'"
+                      :class="{{ .StatusBadge.Class }}">
+                    {{ .StatusBadge.Text }}
+                </span>
+                {{ end }}
+            </a>
+            {{ end }}
+        </nav>
+
+        <!-- Bottom Actions -->
+        <div class="absolute bottom-0 left-0 right-0 p-3 border-t"
+             :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'">
+            <button @click="sidebarPinned = !sidebarPinned"
+                    class="w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors"
+                    :class="darkMode ? 'text-porcelain-500 hover:bg-porcelain-800/50' : 'text-porcelain-500 hover:bg-porcelain-100'">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path x-show="!sidebarPinned" stroke-linecap="round" stroke-linejoin="round" d="M11.25 9l-3 3m0 0l3 3m-3-3h7.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    <path x-show="sidebarPinned" stroke-linecap="round" stroke-linejoin="round" d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"/>
+                </svg>
+                <span class="text-sm transition-opacity duration-200"
+                      :class="(sidebarPinned || sidebarOpen) ? 'opacity-100' : 'lg:opacity-0'">
+                    <span x-text="sidebarPinned ? 'Unpin' : 'Pin'"></span>
+                </span>
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div id="main-wrapper"
+         class="min-h-screen transition-all duration-300"
+         :class="[
+           sidebarPinned ? 'lg:ml-64' : 'lg:ml-20',
+           'pt-16'
+         ]">
+
+        <!-- Top Bar -->
+        <header class="fixed top-0 right-0 z-30 h-16 border-b backdrop-blur-xl transition-all duration-300"
+                :class="[
+                  darkMode ? 'bg-porcelain-950/80 border-porcelain-800' : 'bg-white/80 border-porcelain-200',
+                  sidebarPinned ? 'left-64' : 'left-20'
+                ]">
+            <div class="h-full flex items-center justify-between px-6">
+                <!-- Breadcrumb -->
+                <div class="flex items-center gap-2 text-sm">
+                    <span class="text-porcelain-500">Porcelain</span>
+                    <svg class="w-4 h-4 text-porcelain-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg>
+                    <span class="font-medium" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .Title }}</span>
+                </div>
+
+                <!-- Right Actions -->
+                <div class="flex items-center gap-3">
+                    <!-- WS Status -->
+                    <div class="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium"
+                         :class="wsConnected
+                           ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                           : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'">
+                        <span class="w-1.5 h-1.5 rounded-full animate-pulse" :class="wsConnected ? 'bg-emerald-400' : 'bg-rose-400'"></span>
+                        <span x-text="wsConnected ? 'Live' : 'Offline'"></span>
+                    </div>
+
+                    <!-- Dark Mode Toggle -->
+                    <button @click="darkMode = !darkMode"
+                            class="p-2 rounded-lg transition-colors"
+                            :class="darkMode ? 'hover:bg-porcelain-800 text-porcelain-400' : 'hover:bg-porcelain-100 text-porcelain-600'">
+                        <svg x-show="darkMode" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
+                        </svg>
+                        <svg x-show="!darkMode" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+                        </svg>
+                    </button>
+
+                    <!-- User Menu -->
+                    <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                        <button @click="open = !open"
+                                class="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors"
+                                :class="darkMode ? 'hover:bg-porcelain-800 text-porcelain-300' : 'hover:bg-porcelain-100 text-porcelain-700'">
+                            <div class="w-7 h-7 rounded-full bg-gradient-to-br from-accent-violet to-accent-cyan flex items-center justify-center text-xs font-bold text-white">
+                                {{ .User.Initials }}
+                            </div>
+                            <span class="text-sm font-medium">{{ .User.Name }}</span>
+                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/></svg>
+                        </button>
+
+                        <div x-show="open"
+                             x-transition
+                             class="absolute right-0 mt-2 w-48 rounded-xl border shadow-xl py-1"
+                             :class="darkMode ? 'bg-porcelain-900 border-porcelain-800' : 'bg-white border-porcelain-200'">
+                            <a href="/profile" class="block px-4 py-2 text-sm transition-colors"
+                               :class="darkMode ? 'text-porcelain-300 hover:bg-porcelain-800' : 'text-porcelain-700 hover:bg-porcelain-50'">Profile</a>
+                            <a href="/settings" class="block px-4 py-2 text-sm transition-colors"
+                               :class="darkMode ? 'text-porcelain-300 hover:bg-porcelain-800' : 'text-porcelain-700 hover:bg-porcelain-50'">Settings</a>
+                            <div class="my-1 border-t" :class="darkMode ? 'border-porcelain-800' : 'border-porcelain-200'"></div>
+                            <a href="/logout" class="block px-4 py-2 text-sm text-rose-400 hover:bg-rose-500/10 transition-colors">Sign out</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <main id="main-content" class="p-6 lg:p-8 min-h-[calc(100vh-4rem)]">
+            {{ template "content" . }}
+        </main>
+    </div>
+
+    <!-- HTMX Global Handlers -->
+    <script>
+        document.body.addEventListener('htmx:beforeSwap', function(evt) {
+            if (evt.detail.xhr.status === 401) {
+                window.location.href = '/login';
+            }
+            if (evt.detail.xhr.status >= 400) {
+                const detail = {
+                    message: evt.detail.xhr.responseText || 'An error occurred',
+                    type: 'error'
+                };
+                window.dispatchEvent(new CustomEvent('toast', { detail }));
+            }
+        });
+
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            // Re-initialize any Alpine components in swapped content
+            if (window.Alpine) {
+                Alpine.initTree(evt.detail.target);
+            }
+        });
+
+        // WebSocket connection for real-time updates
+        (function() {
+            let ws;
+            function connect() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                ws = new WebSocket(`${protocol}//${window.location.host}/ws/events`);
+                ws.onopen = () => window.dispatchEvent(new Event('ws-connected'));
+                ws.onclose = () => {
+                    window.dispatchEvent(new Event('ws-disconnected'));
+                    setTimeout(connect, 3000);
+                };
+                ws.onmessage = (evt) => {
+                    const data = JSON.parse(evt.data);
+                    if (data.type === 'toast') {
+                        window.dispatchEvent(new CustomEvent('toast', { detail: data }));
+                    }
+                    if (data.type === 'reload') {
+                        htmx.ajax('GET', window.location.pathname, { target: '#main-content' });
+                    }
+                };
+            }
+            connect();
+        })();
+    </script>
 </body>
 </html>
 {{ end }}

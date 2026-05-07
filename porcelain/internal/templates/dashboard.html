@@ -1,30 +1,197 @@
+<!-- internal/templates/dashboard.html -->
 {{ define "content" }}
-<section class="hero">
-  <p class="eyebrow">CoreOS Control Plane</p>
-  <h1>{{ .Title }}</h1>
-  <p class="muted">Socket-activated Go daemon with integrated secret storage and certificate lifecycle scaffolding.</p>
-  <div>
-    <span class="badge">Auth: {{ .Authentication }}</span>
-    <span class="badge">D-Bus: {{ .DBus }}</span>
-    <span class="badge">Secrets: {{ .SecretsBackend }}</span>
-    <span class="badge">Certificates: {{ .CertificatesBackend }}</span>
-    {{ if .PeerCommonName }}<span class="badge">Peer CN: {{ .PeerCommonName }}</span>{{ end }}
-    {{ if .Subject }}<span class="badge">Subject: {{ .Subject }}</span>{{ end }}
-  </div>
-  {{ if .Groups }}
-  <div>
-    {{ range .Groups }}<span class="badge">{{ . }}</span>{{ end }}
-  </div>
-  {{ end }}
-</section>
+<div class="space-y-8">
+    <!-- Welcome Section -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold tracking-tight" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                Dashboard
+            </h1>
+            <p class="mt-1 text-sm" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+                System overview for <span class="font-mono text-accent-cyan">{{ .Data.Hostname }}</span>
+            </p>
+        </div>
+        <div class="flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-lg border"
+             :class="darkMode ? 'border-porcelain-800 text-porcelain-400' : 'border-porcelain-200 text-porcelain-600'">
+            <span class="w-2 h-2 rounded-full animate-pulse" :class="darkMode ? 'bg-accent-emerald' : 'bg-emerald-500'"></span>
+            {{ .Data.Uptime }}
+        </div>
+    </div>
 
-<section class="grid">
-  {{ range .Modules }}
-  <article class="card">
-    <h2>{{ .Name }}</h2>
-    <p class="muted">{{ .Summary }}</p>
-    <p class="status">{{ .Status }}</p>
-  </article>
-  {{ end }}
-</section>
+    <!-- Stats Row -->
+    <div class="stats-row">
+        {{ range .Data.Stats }}
+        <div class="porcelain-card p-6 relative overflow-hidden group">
+            <div class="flex items-start justify-between">
+                <div>
+                    <p class="text-sm font-medium" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">
+                        {{ .Label }}
+                    </p>
+                    <p class="mt-2 text-2xl font-bold tracking-tight" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">
+                        {{ .Value }}
+                    </p>
+                    {{ if .Change }}
+                    <p class="mt-1 text-xs" :class=".Change.Positive ? 'text-accent-emerald' : 'text-accent-rose'">
+                        {{ .Change.Text }}
+                    </p>
+                    {{ end }}
+                </div>
+                <div class="p-2 rounded-lg" :class="darkMode ? 'bg-porcelain-800' : 'bg-porcelain-100'">
+                    {{ .Icon }}
+                </div>
+            </div>
+
+            <!-- Mini sparkline or progress -->
+            {{ if .Progress }}
+            <div class="mt-4">
+                <div class="flex justify-between text-xs mb-1" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">
+                    <span>{{ percentageString .Progress.Used .Progress.Total }}%</span>
+                    <span>{{ humanizeBytes .Progress.Used }} / {{ humanizeBytes .Progress.Total }}</span>
+                </div>
+                <div class="porcelain-progress">
+                    <div class="porcelain-progress-bar" style="width: {{ percentageString .Progress.Used .Progress.Total }}%"></div>
+                </div>
+            </div>
+            {{ end }}
+
+            <!-- Hover glow effect -->
+            <div class="absolute -bottom-8 -right-8 w-32 h-32 rounded-full blur-3xl opacity-0 group-hover:opacity-20 transition-opacity duration-500"
+                 :class="darkMode ? 'bg-accent-cyan' : 'bg-accent-teal'"></div>
+        </div>
+        {{ end }}
+    </div>
+
+    <!-- Main Grid -->
+    <div class="content-split">
+        <!-- Left Column -->
+        <div class="space-y-6">
+            <!-- Active Services -->
+            <div class="porcelain-card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">
+                        System Services
+                    </h3>
+                    <a href="/services" class="text-xs font-medium text-accent-cyan hover:underline">View all</a>
+                </div>
+                <div class="space-y-3">
+                    {{ range .Data.Services }}
+                    <div class="flex items-center justify-between p-3 rounded-lg transition-colors"
+                         :class="darkMode ? 'hover:bg-porcelain-800/50' : 'hover:bg-porcelain-50'">
+                        <div class="flex items-center gap-3">
+                            <div class="w-2 h-2 rounded-full" :class=".Active ? 'bg-accent-emerald' : 'bg-accent-rose'"></div>
+                            <div>
+                                <p class="text-sm font-medium" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .Name }}</p>
+                                <p class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">{{ .Description }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="badge" :class=".Active ? 'badge-success' : 'badge-danger'">
+                                {{ .Status }}
+                            </span>
+                            <button class="p-1 rounded hover:bg-porcelain-100 dark:hover:bg-porcelain-800 transition-colors"
+                                    hx-post="/api/services/{{ .Name }}/toggle"
+                                    hx-target="closest div"
+                                    hx-swap="outerHTML">
+                                <svg class="w-4 h-4" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-600'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+
+            <!-- Recent Logs -->
+            <div class="porcelain-card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">
+                        Recent Events
+                    </h3>
+                    <a href="/logs" class="text-xs font-medium text-accent-cyan hover:underline">Full logs</a>
+                </div>
+                <div class="porcelain-terminal max-h-64 overflow-y-auto scroll-shadow text-xs">
+                    {{ range .Data.Logs }}
+                    <div class="flex gap-3 py-1">
+                        <span class="text-porcelain-500 font-mono">{{ .Timestamp }}</span>
+                        <span class="font-mono" :class=".Level === 'ERR' ? 'text-accent-rose' : (.Level === 'WRN' ? 'text-accent-amber' : 'text-porcelain-400')">
+                            [{{ .Level }}]
+                        </span>
+                        <span class="text-porcelain-300">{{ .Message }}</span>
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="space-y-6">
+            <!-- Quick Actions -->
+            <div class="porcelain-card p-6">
+                <h3 class="text-lg font-semibold mb-4" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">
+                    Quick Actions
+                </h3>
+                <div class="grid grid-cols-2 gap-3">
+                    {{ range .Data.QuickActions }}
+                    <button class="btn btn-secondary text-sm py-3 flex-col gap-1"
+                            hx-post="{{ .Endpoint }}"
+                            hx-confirm="{{ .Confirm }}"
+                            @htmx:afterRequest="$dispatch('toast', { message: '{{ .SuccessMessage }}', type: 'success' })">
+                        <span class="text-lg">{{ .Icon }}</span>
+                        <span>{{ .Label }}</span>
+                    </button>
+                    {{ end }}
+                </div>
+            </div>
+
+            <!-- Resource Graph -->
+            <div class="porcelain-card p-6">
+                <h3 class="text-lg font-semibold mb-4" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">
+                    Resource Usage
+                </h3>
+                <div class="space-y-4">
+                    {{ range .Data.Resources }}
+                    <div>
+                        <div class="flex justify-between text-sm mb-1">
+                            <span :class="darkMode ? 'text-porcelain-300' : 'text-porcelain-700'">{{ .Name }}</span>
+                            <span class="font-mono text-xs" :class="darkMode ? 'text-porcelain-400' : 'text-porcelain-500'">{{ .Value }}</span>
+                        </div>
+                        <div class="h-2 rounded-full overflow-hidden" :class="darkMode ? 'bg-porcelain-800' : 'bg-porcelain-100'">
+                            <div class="h-full rounded-full transition-all duration-1000 ease-out"
+                                 :class=".Color"
+                                 style="width: {{ .Percentage }}%"></div>
+                        </div>
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+
+            <!-- Sensor Readings -->
+            <div class="porcelain-card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">
+                        Sensors
+                    </h3>
+                    <span class="status-dot status-dot-online"></span>
+                </div>
+                <div class="space-y-3">
+                    {{ range .Data.Sensors }}
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <svg class="w-4 h-4" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                            </svg>
+                            <span class="text-sm" :class="darkMode ? 'text-porcelain-300' : 'text-porcelain-700'">{{ .Name }}</span>
+                        </div>
+                        <span class="font-mono text-sm font-medium"
+                              :class=".Critical ? 'text-accent-rose' : 'text-accent-cyan'">
+                            {{ .Value }}{{ .Unit }}
+                        </span>
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {{ end }}

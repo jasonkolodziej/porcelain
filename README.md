@@ -289,9 +289,22 @@ The important architectural shift is that secret and certificate handling now si
 ### Phase 3 — Host Control Modules
 
 - shared D-Bus clients for systemd, NetworkManager, UDisks2, and firewalld
+  - **done (initial slice):** `internal/dbus/{systemd,udisks2,networkmanager,firewalld}` ship a thin
+    godbus wrapper each, with the systemd `ListUnits` and UDisks2 block-device
+    enumeration paths exercised by the storage and diagnostics modules; deeper
+    surfaces (rule editing, profile activation) land in subsequent slices.
+- module contract and registry
+  - **done:** `internal/modules` defines a `Module` interface + `Registry` so
+    each feature owns its own backend wiring while the router only depends on
+    the interface; sidebar status badges read from `Module.Status`.
 - UDisks2-backed storage workflows for local partitions, encryption, RAID, NFS, and iSCSI
-- NetworkManager and firewalld integration
+  - **done:** read-only block-device snapshot via UDisks2 with a developer
+    fake backend on non-Linux hosts so the storage page renders in macOS dev.
+  - **deferred:** partition creation, LUKS unlock, RAID assembly, NFS, iSCSI.
+- NetworkManager and firewalld integration — *scaffolded clients only*.
 - diagnostics collection and system health surfaces
+  - **done:** hostname / uptime / running services derived from systemd.
+  - **deferred:** journal capture, rpm-ostree state, bundle export.
 
 ### Phase 4 — Workload and Edge Integrations
 
