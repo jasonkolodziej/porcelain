@@ -79,7 +79,11 @@ openssl x509 -req -in /tmp/client.csr \
     -extensions v3_req -extfile /tmp/client.cnf \
     -out /pki/client/client.crt
 
-openssl pkcs12 -export \
+# NOTE: -legacy keeps the bundle on RC2/3DES + SHA-1 MAC so macOS `security
+# import` and Windows CryptoAPI accept it. OpenSSL 3 defaults (PBES2/AES-256 +
+# SHA-256 MAC) decode fine with `openssl` and curl, but macOS Keychain rejects
+# them with "MAC verification failed".
+openssl pkcs12 -export -legacy \
     -inkey /pki/client/client.key \
     -in /pki/client/client.crt \
     -certfile /pki/ca/ca.crt \

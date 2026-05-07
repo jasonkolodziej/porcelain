@@ -38,8 +38,11 @@ func New(cfg config.Config, dexAuth *auth.DexAuth, certStore secretspkg.Certific
 		config: cfg,
 		app:    app,
 		tlsConfig: &tls.Config{
-			MinVersion:               tls.VersionTLS13,
-			NextProtos:               []string{"h2", "http/1.1"},
+			MinVersion: tls.VersionTLS13,
+			// Fiber v3 / fasthttp speaks HTTP/1.1 only. Advertising "h2" here
+			// makes browsers negotiate HTTP/2 and then trip ERR_HTTP2_PROTOCOL_ERROR
+			// when the server replies with HTTP/1 framing.
+			NextProtos:               []string{"http/1.1"},
 			GetCertificate:           tlsManager.GetCertificate,
 			ClientAuth:               tls.RequireAndVerifyClientCert,
 			ClientCAs:                clientCAs,

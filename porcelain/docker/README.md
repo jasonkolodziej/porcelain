@@ -46,7 +46,24 @@ security import ./client.p12 \
   -P porcelain \
   -T /Applications/Safari.app \
   -T "/Applications/Google Chrome.app"
+```
 
+> **macOS gotcha:** if `security import` fails with `MAC verification failed
+> during PKCS12 import (wrong password?)`, your `client.p12` was produced with
+> OpenSSL 3 defaults (PBES2/AES-256 + SHA-256 MAC) which macOS Keychain still
+> rejects. The bundled `docker/generate-dev-pki.sh` now emits `-legacy` p12s
+> automatically — pull a fresh one (`docker compose build --no-cache &&
+> docker compose cp ...`). To re-encode an existing `client.p12` in place
+> without rebuilding:
+>
+> ```sh
+> openssl pkcs12 -in ./client.p12 -passin pass:porcelain -nodes -out /tmp/c.pem
+> openssl pkcs12 -export -legacy -in /tmp/c.pem -passout pass:porcelain \
+>   -name porcelain-dev-client -out ./client.p12
+> rm /tmp/c.pem
+> ```
+
+```sh
 # Trust the dev CA system-wide so the address bar stops warning.
 sudo security add-trusted-cert -d -r trustRoot \
   -k /Library/Keychains/System.keychain ./porcelain-dev-ca.crt

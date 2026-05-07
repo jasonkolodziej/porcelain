@@ -40,11 +40,11 @@
     <script src="https://unpkg.com/htmx.org/dist/ext/ws.js"></script>
     <script src="https://unpkg.com/htmx.org/dist/ext/loading-states.js"></script>
 
+    <!-- Alpine Persist Plugin (must load before Alpine core so plugin registers in time) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.14.3/dist/cdn.min.js"></script>
+
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.3/dist/cdn.min.js"></script>
-
-    <!-- Alpine Persist Plugin -->
-    <script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.14.3/dist/cdn.min.js"></script>
 
     <!-- External Stylesheets - CUSTOMIZE THESE -->
     <link rel="stylesheet" href="/static/css/variables.css">
@@ -358,7 +358,10 @@
             }
         });
 
-        // WebSocket connection for real-time updates
+        // WebSocket connection for real-time updates.
+        // TODO(porcelain): wire up Phase 3 /ws/events endpoint, then re-enable.
+        // Disabled while the server route is unimplemented to avoid a noisy
+        // reconnect loop and 404 in DevTools.
         (function() {
             let ws;
             function connect() {
@@ -379,7 +382,7 @@
                     }
                 };
             }
-            connect();
+            // connect();
         })();
     </script>
 </body>

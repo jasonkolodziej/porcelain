@@ -31,7 +31,7 @@
                         {{ .Value }}
                     </p>
                     {{ if .Change }}
-                    <p class="mt-1 text-xs" :class=".Change.Positive ? 'text-accent-emerald' : 'text-accent-rose'">
+                    <p class="mt-1 text-xs {{ if .Change.Positive }}text-accent-emerald{{ else }}text-accent-rose{{ end }}">
                         {{ .Change.Text }}
                     </p>
                     {{ end }}
@@ -78,14 +78,14 @@
                     <div class="flex items-center justify-between p-3 rounded-lg transition-colors"
                          :class="darkMode ? 'hover:bg-porcelain-800/50' : 'hover:bg-porcelain-50'">
                         <div class="flex items-center gap-3">
-                            <div class="w-2 h-2 rounded-full" :class=".Active ? 'bg-accent-emerald' : 'bg-accent-rose'"></div>
+                            <div class="w-2 h-2 rounded-full {{ if .Active }}bg-accent-emerald{{ else }}bg-accent-rose{{ end }}"></div>
                             <div>
                                 <p class="text-sm font-medium" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .Name }}</p>
                                 <p class="text-xs" :class="darkMode ? 'text-porcelain-500' : 'text-porcelain-400'">{{ .Description }}</p>
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
-                            <span class="badge" :class=".Active ? 'badge-success' : 'badge-danger'">
+                            <span class="badge {{ if .Active }}badge-success{{ else }}badge-danger{{ end }}">
                                 {{ .Status }}
                             </span>
                             <button class="p-1 rounded hover:bg-porcelain-100 dark:hover:bg-porcelain-800 transition-colors"
@@ -114,7 +114,7 @@
                     {{ range .Data.Logs }}
                     <div class="flex gap-3 py-1">
                         <span class="text-porcelain-500 font-mono">{{ .Timestamp }}</span>
-                        <span class="font-mono" :class=".Level === 'ERR' ? 'text-accent-rose' : (.Level === 'WRN' ? 'text-accent-amber' : 'text-porcelain-400')">
+                        <span class="font-mono {{ if eq .Level "ERR" }}text-accent-rose{{ else if eq .Level "WRN" }}text-accent-amber{{ else }}text-porcelain-400{{ end }}">
                             [{{ .Level }}]
                         </span>
                         <span class="text-porcelain-300">{{ .Message }}</span>

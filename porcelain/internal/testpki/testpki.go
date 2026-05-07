@@ -69,7 +69,7 @@ func (b *Bundle) ServerTLSConfig() *tls.Config {
 		Certificates: []tls.Certificate{b.ServerCert},
 		ClientCAs:    b.CAPool,
 		ClientAuth:   tls.RequireAndVerifyClientCert,
-		NextProtos:   []string{"h2", "http/1.1"},
+		NextProtos:   []string{"http/1.1"},
 	}
 }
 
