@@ -42,6 +42,7 @@ func New(ctx context.Context, cfg config.Config) (*Application, error) {
 		Address:                cfg.DBus.Address,
 		Bus:                    dbus.BusType(cfg.DBus.Bus),
 		EnforcePeerCredentials: cfg.DBus.EnforcePeerCredentials,
+		Optional:               cfg.DBus.Optional,
 	})
 	if err := dbusManager.Connect(ctx); err != nil {
 		return nil, fmt.Errorf("connect to D-Bus: %w", err)

@@ -16,5 +16,7 @@ type DashboardView struct {
 	DBus                string
 	SecretsBackend      string
 	CertificatesBackend string
+	PeerCommonName      string
+	PeerFingerprint     string
 	Modules             []ModuleView
 }

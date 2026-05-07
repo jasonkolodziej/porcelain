@@ -1,0 +1,6 @@
+.git
+.github
+**/*_test.go
+**/testpki
+README.md
+*.md

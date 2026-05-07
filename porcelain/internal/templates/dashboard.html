@@ -8,6 +8,7 @@
     <span class="badge">D-Bus: {{ .DBus }}</span>
     <span class="badge">Secrets: {{ .SecretsBackend }}</span>
     <span class="badge">Certificates: {{ .CertificatesBackend }}</span>
+    {{ if .PeerCommonName }}<span class="badge">Peer CN: {{ .PeerCommonName }}</span>{{ end }}
     {{ if .Subject }}<span class="badge">Subject: {{ .Subject }}</span>{{ end }}
   </div>
   {{ if .Groups }}

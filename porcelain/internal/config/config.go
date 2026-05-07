@@ -36,6 +36,7 @@ type DBusConfig struct {
 	Address                string
 	Bus                    string
 	EnforcePeerCredentials bool
+	Optional               bool
 }
 
 // SecretsConfig selects the secret backend and backend-specific hints.
@@ -52,6 +53,9 @@ type CertificatesConfig struct {
 	CommonName string
 	DNSNames   []string
 	ValidDays  int
+	// Directory holds pre-provisioned PKI material when the filesystem backend
+	// is selected. Expected files: server.crt, server.key, ca.crt.
+	Directory string
 }
 
 // LoadFromEnv returns a runnable configuration with sensible scaffold defaults.
@@ -74,6 +78,7 @@ func LoadFromEnv() Config {
 			Address:                envOrDefault("PORCELAIN_DBUS_ADDRESS", ""),
 			Bus:                    envOrDefault("PORCELAIN_DBUS_BUS", "system"),
 			EnforcePeerCredentials: envOrDefault("PORCELAIN_DBUS_ENFORCE_PEER_CREDS", "true") == "true",
+			Optional:               envOrDefault("PORCELAIN_DBUS_OPTIONAL", "false") == "true",
 		},
 		Secrets: SecretsConfig{
 			Backend:         envOrDefault("PORCELAIN_SECRETS_BACKEND", "memory"),
@@ -86,6 +91,7 @@ func LoadFromEnv() Config {
 			CommonName: envOrDefault("PORCELAIN_TLS_COMMON_NAME", "localhost"),
 			DNSNames:   csvOrDefault("PORCELAIN_TLS_DNS_NAMES", []string{"localhost"}),
 			ValidDays:  30,
+			Directory:  envOrDefault("PORCELAIN_TLS_DIR", "/pki/server"),
 		},
 	}
 }

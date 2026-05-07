@@ -11,6 +11,7 @@ import (
 
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/auth"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/config"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/server/middleware"
 	uitemplates "github.com/jasonkolodziej/porcelain/porcelain/internal/templates"
 	"github.com/jasonkolodziej/porcelain/porcelain/pkg/api"
 )
@@ -27,6 +28,7 @@ func NewRouter(cfg config.Config, dexAuth *auth.DexAuth) (*fiber.App, error) {
 		AppName:      "Porcelain",
 	})
 
+	app.Use(middleware.MTLSPeerIdentity())
 	app.Use(dexAuth.Middleware())
 
 	app.Get("/healthz", func(c fiber.Ctx) error {
@@ -51,6 +53,11 @@ func NewRouter(cfg config.Config, dexAuth *auth.DexAuth) (*fiber.App, error) {
 			SecretsBackend:      cfg.Secrets.Backend,
 			CertificatesBackend: cfg.Certificates.Backend,
 			Modules:             moduleCards(),
+		}
+
+		if identity, ok := middleware.PeerIdentityFromFiber(c); ok {
+			data.PeerCommonName = identity.CommonName
+			data.PeerFingerprint = identity.FingerprintSHA256
 		}
 
 		if claims, ok := auth.ClaimsFromFiber(c); ok {

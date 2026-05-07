@@ -28,6 +28,8 @@ func NewCertificateStore(secretStore secretspkg.SecretStore, cfg config.Certific
 	switch cfg.Backend {
 	case "", "selfsigned":
 		return NewSelfSignedStore(secretStore, cfg.CommonName, cfg.DNSNames, cfg.ValidDays), nil
+	case "filesystem":
+		return NewFilesystemCertificateStore(secretStore, cfg.Directory)
 	case "cert-manager":
 		return NewCertManagerStore(secretStore), nil
 	case "vault-pki":

@@ -1,0 +1,15 @@
+services:
+  porcelain:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: porcelain:dev
+    container_name: porcelain-ui
+    ports:
+      - "8443:8443"
+    environment:
+      PORCELAIN_AUTH_ENABLED: "false"
+      PORCELAIN_DBUS_OPTIONAL: "true"
+    # Healthcheck is intentionally omitted because the listener requires
+    # client mTLS; the docker-internal HEALTHCHECK probe cannot present a
+    # client certificate.

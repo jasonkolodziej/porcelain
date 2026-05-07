@@ -21,6 +21,11 @@ type ConnectionConfig struct {
 	Address                string
 	Bus                    BusType
 	EnforcePeerCredentials bool
+	// Optional indicates that a missing system bus should be logged as a warning
+	// rather than failing daemon startup. This is appropriate for local dev,
+	// container-based UI smoke tests, and unit tests where host integration is
+	// not exercised.
+	Optional bool
 }
 
 // ConnectionManager owns the D-Bus bootstrap boundary for future host integration clients.
@@ -41,6 +46,9 @@ func NewConnectionManager(cfg ConnectionConfig) *ConnectionManager {
 func (m *ConnectionManager) Connect(_ context.Context) error {
 	if m.config.Bus == SystemBus && m.config.Address == "" {
 		if _, err := os.Stat("/run/dbus/system_bus_socket"); err != nil {
+			if m.config.Optional {
+				return nil
+			}
 			return fmt.Errorf("system bus socket is not available: %w", err)
 		}
 	}

@@ -224,6 +224,25 @@ Those files are still minimal, but they are aligned with the actual server boot 
 
 ---
 
+## Local UI Preview
+
+A self-contained Docker workflow renders the dashboard in a real browser
+without bypassing mTLS. The image bakes a developer CA, a server certificate,
+and a client certificate into `/pki` so the handshake stays mandatory.
+
+```sh
+cd porcelain
+docker compose up --build
+docker compose cp porcelain:/pki/client/client.p12 ./client.p12
+# import client.p12 into your browser (password: porcelain), then visit
+# https://localhost:8443
+```
+
+See `porcelain/docker/README.md` for the full workflow, including how to
+import the developer CA into the browser's trusted roots.
+
+---
+
 ## Security Model
 
 | Layer | Mechanism | Scaffold Status |
@@ -258,6 +277,13 @@ The important architectural shift is that secret and certificate handling now si
 - production-ready `systemd-creds` flows for service credentials
 - Dex OIDC token verification and client-secret loading from the secret store
 - mTLS trust bundle handling and client certificate validation
+- a dedicated Fiber middleware for mTLS peer identity extraction so the verified
+  client certificate (subject CN, SANs, fingerprint) is composed alongside Dex
+  claims for downstream handlers
+- end-to-end tests exercising the full mTLS handshake against the Fiber router
+- a Dockerfile and bootstrap script that issues a server certificate, a client
+  certificate, and a developer trust bundle so the UI can be exercised in a
+  browser before deployment
 - secret watch and rotation semantics for long-lived runtime state
 
 ### Phase 3 — Host Control Modules
