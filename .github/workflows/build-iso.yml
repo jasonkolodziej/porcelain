@@ -1,0 +1,28 @@
+name: Build ISO
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build-iso:
+    runs-on: ubuntu-latest  # x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build ISO
+        run: |
+          mkdir -p output-iso
+          podman run --rm --privileged --pull=newer \
+            --security-opt label=type:unconfined_t \
+            -v "$PWD/output-iso:/output" \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            build --type iso --rootfs btrfs \
+            ghcr.io/jasonkolodziej/porcelain-base:latest
+
+      - name: Upload ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: n5-pro-installer-iso
+          path: output-iso/
+          retention-days: 7

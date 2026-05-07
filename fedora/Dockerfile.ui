@@ -1,0 +1,72 @@
+
+# =============================================================================
+# DEEPIN 25 DESKTOP ENVIRONMENT EXTENSION
+# Based on: n5-pro-base:latest (must be built first)
+# Use this for: workstation, media center, daily driver with GUI
+# =============================================================================
+FROM localhost/n5-pro-base:latest
+
+LABEL org.opencontainers.image.title="Fedora N5 Pro + Deepin DE"
+LABEL org.opencontainers.image.description="Deepin Desktop Environment on N5 Pro hardware base"
+
+# Deepin Desktop Environment
+RUN dnf install -y --setopt=install_weak_deps=False \
+    deepin-desktop \
+    deepin-session-shell \
+    deepin-control-center \
+    deepin-launcher \
+    deepin-dock \
+    deepin-file-manager \
+    deepin-terminal \
+    deepin-calendar \
+    deepin-calculator \
+    deepin-editor \
+    deepin-music \
+    deepin-movie \
+    deepin-image-viewer \
+    deepin-screenshot \
+    deepin-system-monitor \
+    lightdm \
+    lightdm-gtk-greeter \
+    qt5-qtplatformplugins \
+    qt6-qtplatformplugins \
+    qgnomeplatform-qt5 \
+    qgnomeplatform-qt6 \
+    && dnf clean all
+
+# Additional GUI apps
+RUN dnf install -y --setopt=install_weak_deps=False \
+    firefox \
+    thunderbird \
+    libreoffice \
+    gimp \
+    inkscape \
+    vlc \
+    mpv \
+    && dnf clean all
+
+# Switch to graphical target + enable display manager
+RUN systemctl set-default graphical.target && \
+    systemctl enable lightdm
+
+# LightDM DDE session config
+RUN mkdir -p /etc/lightdm/lightdm.conf.d && \
+    cat > /etc/lightdm/lightdm.conf.d/deepin.conf << 'EOF'
+[Seat:*]
+user-session=deepin
+greeter-session=lightdm-gtk-greeter
+EOF
+
+# Deepin-specific tweaks
+RUN mkdir -p /etc/xdg/deepin && \
+    cat > /etc/xdg/deepin/deepin.conf << 'EOF'
+[Appearance]
+icon-theme=deepin
+gtk-theme=deepin
+cursor-theme=deepin
+font=Noto Sans CJK SC
+EOF
+
+# Cleanup
+RUN dnf clean all && rm -rf /var/cache/dnf/* /tmp/* /var/tmp/* && \
+    bootc container lint || true

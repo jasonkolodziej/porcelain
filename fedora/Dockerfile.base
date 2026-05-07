@@ -1,0 +1,210 @@
+# =============================================================================
+# N5 PRO HARDWARE BASE - Minimal, headless, firmware via DNF
+# Use for: NAS, k3s nodes, CI runners, remote build hosts
+# =============================================================================
+ARG FEDORA_BOOTC_VERSION=43
+FROM quay.io/fedora/fedora-bootc:${FEDORA_BOOTC_VERSION} AS builder
+
+RUN set -eux; \
+    kernel_version="$(rpm -q kernel-core --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n' | sort -V | tail -1)"; \
+    running_kernel="$(uname -r)"; \
+    dnf install -y --setopt=install_weak_deps=False \
+    "kernel-devel-${kernel_version}" \
+    kernel-headers \
+    gcc make git dkms elfutils-libelf-devel \
+    && dnf clean all; \
+    [ -e /lib/modules ] || ln -s /usr/lib/modules /lib/modules; \
+    mkdir -p "/lib/modules/${kernel_version}"; \
+    ln -sfn "/usr/src/kernels/${kernel_version}" "/lib/modules/${kernel_version}/build"; \
+    mkdir -p "/lib/modules/${running_kernel}"; \
+    ln -sfn "/usr/src/kernels/${kernel_version}" "/lib/modules/${running_kernel}/build"
+
+WORKDIR /src
+
+# RTL8126 driver (not yet in mainline)
+RUN git clone --depth 1 https://github.com/awesometic/realtek-r8126-dkms.git && \
+    cd realtek-r8126-dkms && \
+    kver="$(rpm -q kernel-devel --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n' | sort -V | tail -1)" && \
+    make -C src KVER="$kver" && make -C src KVER="$kver" install DESTDIR=/out && \
+    mkdir -p "/out/usr/lib/modules/${kver}/kernel/drivers/net" && \
+    cp -av "/lib/modules/${kver}/kernel/drivers/net/r8126.ko" \
+    "/out/usr/lib/modules/${kver}/kernel/drivers/net/r8126.ko"
+
+# ------------------------------------------------------------------------------
+
+# ARG FEDORA_BOOTC_VERSION=43
+FROM quay.io/fedora/fedora-bootc:${FEDORA_BOOTC_VERSION}
+
+LABEL org.opencontainers.image.title="Fedora N5 Pro Base (Minimal)"
+LABEL org.opencontainers.image.description="Minimal Fedora bootc hardware base for Minisforum N5 Pro"
+LABEL org.opencontainers.image.source = "https://github.com/jasonkolodziej/porcelain"
+# Bootc/OSTree filesystem compatibility
+RUN rmdir /opt && ln -s -T /var/opt /opt && \
+    mkdir -p /var/roothome /var/home /var/lib/bluetooth /var/lib/NetworkManager /var/lib/zfs
+
+# Copy built kernel modules from builder stages
+COPY --from=builder /out/usr/lib/modules /usr/lib/modules
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/modules/ /usr/lib/modules/
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/sbin/zfs /usr/sbin/zfs
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/sbin/zpool /usr/sbin/zpool
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/sbin/zdb /usr/sbin/zdb
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/sbin/zed /usr/sbin/zed
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/sbin/zgenhostid /usr/sbin/zgenhostid
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib64/libzfs.so.7 /usr/lib64/libzfs.so.7
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib64/libzfs_core.so.3 /usr/lib64/libzfs_core.so.3
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib64/libzpool.so.7 /usr/lib64/libzpool.so.7
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /etc/zfs/ /etc/zfs/
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-import-cache.service /usr/lib/systemd/system/zfs-import-cache.service
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-import-scan.service /usr/lib/systemd/system/zfs-import-scan.service
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-import.target /usr/lib/systemd/system/zfs-import.target
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-mount.service /usr/lib/systemd/system/zfs-mount.service
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-mount@.service /usr/lib/systemd/system/zfs-mount@.service
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-scrub-monthly@.timer /usr/lib/systemd/system/zfs-scrub-monthly@.timer
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-scrub-weekly@.timer /usr/lib/systemd/system/zfs-scrub-weekly@.timer
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-scrub@.service /usr/lib/systemd/system/zfs-scrub@.service
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-share.service /usr/lib/systemd/system/zfs-share.service
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-trim-monthly@.timer /usr/lib/systemd/system/zfs-trim-monthly@.timer
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-trim-weekly@.timer /usr/lib/systemd/system/zfs-trim-weekly@.timer
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-trim@.service /usr/lib/systemd/system/zfs-trim@.service
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-volume-wait.service /usr/lib/systemd/system/zfs-volume-wait.service
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-volumes.target /usr/lib/systemd/system/zfs-volumes.target
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs-zed.service /usr/lib/systemd/system/zfs-zed.service
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/lib/systemd/system/zfs.target /usr/lib/systemd/system/zfs.target
+COPY --from=ghcr.io/jasonkolodziej/n5-fcos-bootc-zfs /usr/share/zfs/ /usr/share/zfs/
+
+# =============================================================================
+# CORE SYSTEM + FIRMWARE (via DNF, OSTree-tracked)
+# =============================================================================
+RUN dnf install -y --skip-unavailable --setopt=install_weak_deps=False \
+    # Kernel and firmware
+    kernel-modules-extra \
+    linux-firmware \
+    linux-firmware-amd \
+    amd-gpu-firmware \
+    amd-ucode-firmware \
+    \
+    # Base userspace
+    bash-completion \
+    vim-minimal \
+    htop \
+    tmux \
+    curl \
+    wget \
+    rsync \
+    \
+    # Container runtime (Podman for workload isolation)
+    podman \
+    podman-compose \
+    buildah \
+    skopeo \
+    \
+    # Remote management
+    openssh-server \
+    cockpit \
+    cockpit-storaged \
+    cockpit-networkmanager \
+    cockpit-podman \
+    \
+    # Networking: 10GbE + 5GbE + USB4
+    kmod-aquantia \
+    thunderbolt-tools \
+    tbtools \
+    NetworkManager \
+    NetworkManager-tui \
+    NetworkManager-wifi \
+    ethtool \
+    iperf3 \
+    bridge-utils \
+    vlan \
+    \
+    # Storage: SATA/NVMe/ZFS
+    smartmontools \
+    nvme-cli \
+    mdadm \
+    btrfs-progs \
+    xfsprogs \
+    e2fsprogs \
+    iscsi-initiator-utils \
+    \
+    # USB4 / OCuLink / PCIe
+    bolt \
+    pciutils \
+    usbutils \
+    \
+    # Hardware monitoring (ITE EC, ECC)
+    lm_sensors \
+    rasdaemon \
+    edac-utils \
+    thermald \
+    \
+    # Security & updates
+    firewalld \
+    fail2ban \
+    usbguard \
+    bluez \
+    fwupd \
+    fwupd-efi \
+    && dnf clean all
+
+# =============================================================================
+# SYSTEM CONFIGURATION
+# =============================================================================
+RUN set -eux; \
+    systemctl set-default multi-user.target; \
+    for unit in \
+    NetworkManager.service \
+    sshd.service \
+    cockpit.socket \
+    firewalld.service \
+    thermald.service \
+    rasdaemon.service \
+    podman.socket \
+    fwupd.service \
+    zfs-import-cache.service \
+    zfs-mount.service \
+    zfs-zed.service; do \
+    if systemctl list-unit-files --type=service --type=socket --all | awk '{print $1}' | grep -qx "$unit"; then \
+    systemctl enable "$unit"; \
+    fi; \
+    done
+
+# Kernel module tuning
+RUN cat > /etc/modprobe.d/n5-pro.conf << 'EOF'
+options amdgpu si_support=1 cik_support=1 noretry=0
+options r8126 tx_no_close=1
+options atlantic hwts=1 enable_aspm=0
+options it87 force_id=0x8628 ignore_resource_conflict=1
+blacklist radeon
+blacklist nouveau
+EOF
+
+# Dracut config
+RUN set -eux; \
+    if [ -d /usr/lib/dracut/modules.d/90zfs ] || [ -d /usr/lib/dracut/modules.d/zfs ]; then \
+    printf '%s\n' \
+    'add_drivers+=" amdgpu ahci nvme xhci_hcd thunderbolt r8126 atlantic it87 zfs "' \
+    'add_dracutmodules+=" zfs "' \
+    'omit_drivers+=" radeon nouveau "' \
+    > /etc/dracut.conf.d/n5-pro.conf; \
+    else \
+    printf '%s\n' \
+    'add_drivers+=" amdgpu ahci nvme xhci_hcd thunderbolt r8126 atlantic it87 "' \
+    'omit_drivers+=" radeon nouveau "' \
+    > /etc/dracut.conf.d/n5-pro.conf; \
+    fi
+
+# Regenerate initramfs
+RUN kernel_version=$(rpm -q kernel-core --qf '%{VERSION}-%{RELEASE}.%{ARCH}\n' | sort -V | tail -1) && \
+    dracut --force --kver "$kernel_version" /usr/lib/modules/"$kernel_version"/initramfs.img && \
+    depmod -a "$kernel_version"
+
+# ZFS post-install
+RUN ldconfig && systemctl preset zfs-import-cache zfs-mount zfs-zed zfs-import-scan
+
+# User setup
+RUN useradd -m -G wheel -s /bin/bash -d /var/home/core core && \
+    echo 'core ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/core-sudo
+
+# Cleanup
+RUN dnf clean all && rm -rf /var/cache/dnf/* /tmp/* /var/tmp/* && \
+    bootc container lint || true
