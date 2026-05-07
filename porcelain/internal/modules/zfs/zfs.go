@@ -30,8 +30,21 @@ type Task struct {
 	Target    string    `json:"target"`
 	State     string    `json:"state"`
 	Message   string    `json:"message"`
+	Progress  float64   `json:"progress"`
+	ETA       string    `json:"eta"`
 	StartedAt time.Time `json:"started_at"`
 	EndedAt   time.Time `json:"ended_at"`
+}
+
+type scrubProgress struct {
+	Pool       string
+	Summary    string
+	Details    string
+	State      string
+	Percent    float64
+	ETA        string
+	StartedAt  string
+	InProgress bool
 }
 
 // New returns a Module that probes for the zpool binary on PATH.
@@ -86,7 +99,12 @@ func (m *Module) Snapshot(ctx context.Context) (viewdata.ZFSPageData, error) {
 		if dsErr == nil {
 			pools[i].Datasets = datasets
 		}
-		pools[i].ScrubStatus, pools[i].LastScrub = poolScrubStatus(ctx, pools[i].Name)
+		progress, progressErr := m.scrubProgress(ctx, pools[i].Name)
+		if progressErr == nil {
+			pools[i].ScrubStatus, pools[i].LastScrub = progress.statusAndTimestamp()
+		} else {
+			pools[i].ScrubStatus, pools[i].LastScrub = poolScrubStatus(ctx, pools[i].Name)
+		}
 	}
 
 	data.Pools = pools
@@ -317,7 +335,7 @@ func (m *Module) StartScrub(ctx context.Context, name string) error {
 		m.taskFail(taskID, strings.TrimSpace(string(out)))
 		return fmt.Errorf("zpool scrub failed: %s", strings.TrimSpace(string(out)))
 	}
-	m.taskDone(taskID, "scrub started")
+	m.taskRunning(taskID, "scrub started")
 	return nil
 }
 
@@ -401,7 +419,7 @@ func (m *Module) RecentEvents(ctx context.Context, limit int) ([]string, error) 
 }
 
 // RecentTasks returns newest-first tracked operations, capped by limit.
-func (m *Module) RecentTasks(limit int) []Task {
+func (m *Module) RecentTasks(ctx context.Context, limit int) []Task {
 	if m == nil {
 		return nil
 	}
@@ -417,6 +435,7 @@ func (m *Module) RecentTasks(limit int) []Task {
 	for i := len(m.tasks) - 1; i >= 0 && len(out) < limit; i-- {
 		out = append(out, m.tasks[i])
 	}
+	m.enrichTasks(ctx, out)
 	return out
 }
 
@@ -440,6 +459,10 @@ func (m *Module) taskDone(id, msg string) {
 	m.updateTask(id, "done", msg)
 }
 
+func (m *Module) taskRunning(id, msg string) {
+	m.updateTask(id, "running", msg)
+}
+
 func (m *Module) taskFail(id, msg string) {
 	m.updateTask(id, "failed", msg)
 }
@@ -454,10 +477,182 @@ func (m *Module) updateTask(id, state, msg string) {
 		if m.tasks[i].ID == id {
 			m.tasks[i].State = state
 			m.tasks[i].Message = msg
-			m.tasks[i].EndedAt = time.Now().UTC()
+			if state == "running" {
+				m.tasks[i].EndedAt = time.Time{}
+			} else {
+				m.tasks[i].EndedAt = time.Now().UTC()
+			}
 			return
 		}
 	}
+}
+
+func (m *Module) enrichTasks(ctx context.Context, tasks []Task) {
+	for i := range tasks {
+		if tasks[i].Action != "scrub-start" || tasks[i].State != "running" {
+			continue
+		}
+		progress, err := m.scrubProgress(ctx, tasks[i].Target)
+		if err != nil {
+			continue
+		}
+		if progress.InProgress {
+			tasks[i].Progress = progress.Percent
+			tasks[i].ETA = progress.ETA
+			tasks[i].Message = progress.taskMessage()
+			continue
+		}
+
+		finalMessage := progress.completionMessage()
+		if strings.TrimSpace(finalMessage) == "" {
+			finalMessage = "scrub finished"
+		}
+		tasks[i].State = "done"
+		tasks[i].Message = finalMessage
+		m.taskDone(tasks[i].ID, finalMessage)
+	}
+}
+
+func (m *Module) scrubProgress(ctx context.Context, pool string) (scrubProgress, error) {
+	if m == nil || m.mode == "fake" {
+		return scrubProgress{}, fmt.Errorf("zpool not installed")
+	}
+	cmdCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	out, err := exec.CommandContext(cmdCtx, "zpool", "status", "-v", pool).Output()
+	if err != nil {
+		return scrubProgress{}, err
+	}
+	return parseScrubProgress(pool, string(out)), nil
+}
+
+func parseScrubProgress(pool, raw string) scrubProgress {
+	progress := scrubProgress{Pool: pool, State: "unknown"}
+	lines := strings.Split(raw, "\n")
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "scan:") {
+			continue
+		}
+		rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "scan:"))
+		progress.Summary = rest
+		if idx := strings.Index(rest, " since "); idx >= 0 {
+			progress.StartedAt = strings.TrimSpace(rest[idx+7:])
+		}
+		if strings.Contains(rest, "scrub in progress") {
+			progress.State = "running"
+			progress.InProgress = true
+			for j := i + 1; j < len(lines); j++ {
+				detail := strings.TrimSpace(lines[j])
+				if detail == "" {
+					continue
+				}
+				progress.Details = detail
+				progress.Percent = parseScrubPercent(detail)
+				progress.ETA = parseScrubETA(detail)
+				break
+			}
+			return progress
+		}
+		if strings.Contains(rest, "scrub repaired") {
+			progress.State = "done"
+			return progress
+		}
+		if strings.Contains(rest, "scrub canceled") || strings.Contains(rest, "scrub stopped") {
+			progress.State = "stopped"
+			return progress
+		}
+		if strings.Contains(rest, "none requested") {
+			progress.State = "idle"
+			return progress
+		}
+		progress.State = rest
+		return progress
+	}
+	return progress
+}
+
+func parseScrubPercent(detail string) float64 {
+	marker := "% done"
+	idx := strings.Index(detail, marker)
+	if idx < 0 {
+		return 0
+	}
+	left := strings.TrimSpace(detail[:idx])
+	comma := strings.LastIndex(left, ",")
+	if comma >= 0 {
+		left = strings.TrimSpace(left[comma+1:])
+	}
+	value, err := strconv.ParseFloat(left, 64)
+	if err != nil {
+		return 0
+	}
+	return value
+}
+
+func parseScrubETA(detail string) string {
+	marker := " to go"
+	idx := strings.Index(detail, marker)
+	if idx < 0 {
+		return ""
+	}
+	left := strings.TrimSpace(detail[:idx])
+	comma := strings.LastIndex(left, ",")
+	if comma < 0 {
+		return ""
+	}
+	return strings.TrimSpace(left[comma+1:])
+}
+
+func (s scrubProgress) taskMessage() string {
+	parts := make([]string, 0, 3)
+	if s.Percent > 0 {
+		parts = append(parts, fmt.Sprintf("%.2f%% done", s.Percent))
+	}
+	if strings.TrimSpace(s.ETA) != "" {
+		parts = append(parts, s.ETA+" to go")
+	}
+	if strings.TrimSpace(s.StartedAt) != "" {
+		parts = append(parts, "since "+s.StartedAt)
+	}
+	if len(parts) == 0 {
+		return s.Summary
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (s scrubProgress) completionMessage() string {
+	if s.State == "stopped" {
+		return s.Summary
+	}
+	if s.State == "done" {
+		return s.Summary
+	}
+	return ""
+}
+
+func (s scrubProgress) statusAndTimestamp() (string, string) {
+	if s.InProgress {
+		status := "scrub "
+		if s.Percent > 0 {
+			status += fmt.Sprintf("%.0f%%", s.Percent)
+		} else {
+			status += "running"
+		}
+		if strings.TrimSpace(s.ETA) != "" {
+			return status, s.ETA + " to go"
+		}
+		return status, s.StartedAt
+	}
+	if strings.Contains(s.Summary, " on ") {
+		parts := strings.SplitN(s.Summary, " on ", 2)
+		return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+	}
+	if s.State == "idle" {
+		return "none", ""
+	}
+	return s.Summary, s.StartedAt
 }
 
 func min(a, b int) int {

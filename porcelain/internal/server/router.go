@@ -528,7 +528,7 @@ func registerZFSAPI(app *fiber.App, registry *modules.Registry, authorizer polic
 				limit = n
 			}
 		}
-		output := renderZFSTasksHTML(zm, limit)
+		output := renderZFSTasksHTML(c.Context(), zm, limit)
 		c.Type("html")
 		return c.SendString(output)
 	})
@@ -578,7 +578,7 @@ func registerZFSAPI(app *fiber.App, registry *modules.Registry, authorizer polic
 					return false
 				}
 
-				tasksHTML := renderZFSTasksHTML(zm, taskLimit)
+				tasksHTML := renderZFSTasksHTML(context.Background(), zm, taskLimit)
 				if err := writeSSEEvent(w, "tasks", tasksHTML); err != nil {
 					return false
 				}
@@ -613,8 +613,8 @@ func renderZFSEventsHTML(ctx context.Context, zm *zfs.Module, limit int) (string
 		html.EscapeString(strings.Join(lines, "\n")) + "</pre>", nil
 }
 
-func renderZFSTasksHTML(zm *zfs.Module, limit int) string {
-	tasks := zm.RecentTasks(limit)
+func renderZFSTasksHTML(ctx context.Context, zm *zfs.Module, limit int) string {
+	tasks := zm.RecentTasks(ctx, limit)
 	if len(tasks) == 0 {
 		return "<p class=\"text-xs\">No tracked ZFS operations yet.</p>"
 	}
@@ -635,8 +635,22 @@ func renderZFSTasksHTML(zm *zfs.Module, limit int) string {
 		b.WriteString("<span class=\"text-xs font-mono\">" + html.EscapeString(task.Action+" "+task.Target) + "</span>")
 		b.WriteString("<span class=\"badge " + stateClass + "\">" + html.EscapeString(task.State) + "</span>")
 		b.WriteString("</div>")
+		if task.Progress > 0 {
+			b.WriteString("<div class=\"mt-2\">")
+			b.WriteString("<div class=\"flex items-center justify-between gap-2 text-[11px] opacity-80\">")
+			b.WriteString("<span>progress</span>")
+			b.WriteString("<span>" + html.EscapeString(fmt.Sprintf("%.2f%%", task.Progress)) + "</span>")
+			b.WriteString("</div>")
+			b.WriteString("<div class=\"mt-1 h-1.5 overflow-hidden rounded bg-porcelain-200 dark:bg-porcelain-800\">")
+			b.WriteString("<div class=\"h-full bg-accent-info\" style=\"width: " + html.EscapeString(fmt.Sprintf("%.2f", task.Progress)) + "%\"></div>")
+			b.WriteString("</div>")
+			b.WriteString("</div>")
+		}
 		if strings.TrimSpace(task.Message) != "" {
 			b.WriteString("<p class=\"text-xs mt-1\">" + html.EscapeString(task.Message) + "</p>")
+		}
+		if strings.TrimSpace(task.ETA) != "" {
+			b.WriteString("<p class=\"text-[11px] opacity-70 mt-1\">ETA: " + html.EscapeString(task.ETA) + "</p>")
 		}
 		b.WriteString("<p class=\"text-[11px] opacity-70 mt-1\">" + html.EscapeString(task.StartedAt.Format(time.RFC3339)) + "</p>")
 		b.WriteString("</div>")

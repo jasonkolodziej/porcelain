@@ -453,8 +453,9 @@ Route Handler:
     `/api/zfs/stream` over SSE so event and task panels update through a
     persistent stream instead of timer-based polling, while preserving manual
     refresh fallbacks.
-  - **deferred:** richer per-operation progress telemetry beyond periodic
-    streamed snapshots.
+  - **done (progress follow-up):** scrub tasks now stay active until ZFS
+    reports completion, with parsed percentage and ETA telemetry surfaced in
+    the streamed task panel and pool scrub status copy.
 - lm-sensors inventory and telemetry views
   - **done (phase 2 slice):** `sensors` module now parses `sensors -j`
     telemetry when available, rendering per-chip readings, high/critical values,
