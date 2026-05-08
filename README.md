@@ -605,31 +605,34 @@ Missing code-wise items:
 - Error observed: cannot unmarshal string into map[string]float64
 - Code location: sensors.go
 - Why: parser expects only numeric leaf maps, but sensors JSON includes string fields in many chips
+- **✅ Fixed:** parser now uses `map[string]json.RawMessage` at the feature level and skips non-object entries (e.g. `"Adapter"` string fields).
 
 2. ZFS events endpoint treats normal empty/error cases as hard 400
 - Endpoint mapping returns 400 on RecentEvents error: router.go
 - RecentEvents currently fails hard on zpool events non-zero: zfs.go
 - Result in UI: repeated 400 and aborted stream when no usable event output
+- **✅ Fixed:** `/api/zfs/events` now returns 200 with a styled HTML error message instead of 400, matching the SSE stream path. The UI no longer breaks on hosts without active ZFS events.
 
 3. ZFS status logic can show ok while data path is effectively failing
 - Status checks only zpool on PATH: zfs.go
 - Data path can still fail at runtime (list/events/status commands)
+- **Deferred:** addressing this requires a runtime health-check loop outside the current snapshot path; tracked for a follow-up.
 
 Missing docker/runtime-wise items:
 1. Cloudflare module
 - Runtime dependency missing: cloudflared binary
 - Check in code: cloudflare.go
+- **Diagnostics hint added:** the diagnostics page now surfaces an actionable "Actionable Hints" card with the install command when cloudflared is absent.
 
 2. Podman module
 - Binary is present, but probe says daemon unavailable
 - Probe path: podman.go
 - Likely runtime issue: podman socket/service accessibility, not route wiring
+- **✅ Fixed (diagnostics side):** the diagnostics page now shows an "Actionable Hints" card for the Containers module when the daemon is unavailable, with the exact `systemctl --user enable --now podman.socket` command the operator needs to run.
 
 What is confirmed good now:
 1. D-Bus module wiring for storage/network/firewall/diagnostics is functional in current run
 2. UDisks-backed block devices are visible on storage route
-
-If you want, I can do the next step now:
-1. Patch Sensors JSON parsing to tolerate mixed numeric/string payloads
-2. Patch ZFS events route to degrade gracefully instead of returning 400
-3. Add a small diagnostics card/detail for podman socket availability so podman failure is immediately actionable in UI
+3. Sensors JSON parser tolerates mixed-type chips (✅ fixed)
+4. ZFS events endpoint degrades gracefully instead of hard 400 (✅ fixed)
+5. Diagnostics page surfaces actionable runtime hints for degraded modules (✅ added)

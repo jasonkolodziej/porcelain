@@ -312,7 +312,9 @@ func readSensorsJSON(ctx context.Context) ([]viewdata.SensorChip, error) {
 		return nil, fmt.Errorf("sensors -j failed: %w", err)
 	}
 
-	var root map[string]map[string]map[string]float64
+	// sensors -j includes string fields like "Adapter" alongside numeric feature
+	// objects. Use json.RawMessage at each level and skip non-object entries.
+	var root map[string]map[string]json.RawMessage
 	if err := json.Unmarshal(out, &root); err != nil {
 		return nil, fmt.Errorf("parse sensors json: %w", err)
 	}
@@ -325,16 +327,23 @@ func readSensorsJSON(ctx context.Context) ([]viewdata.SensorChip, error) {
 
 	chips := make([]viewdata.SensorChip, 0, len(chipNames))
 	for _, chipName := range chipNames {
-		featureMap := root[chipName]
-		featureNames := make([]string, 0, len(featureMap))
-		for f := range featureMap {
+		rawFeatureMap := root[chipName]
+		featureNames := make([]string, 0, len(rawFeatureMap))
+		for f := range rawFeatureMap {
 			featureNames = append(featureNames, f)
 		}
 		sort.Strings(featureNames)
 
 		readings := make([]viewdata.SensorReading, 0)
 		for _, featureName := range featureNames {
-			vals := featureMap[featureName]
+			// sensors -j includes per-chip metadata fields (e.g. "Adapter": "ISA adapter")
+			// alongside numeric feature objects. These metadata fields are strings, not
+			// sensor readings, so skip any entry that does not unmarshal as a float64 map.
+			var vals map[string]float64
+			if err := json.Unmarshal(rawFeatureMap[featureName], &vals); err != nil {
+				continue
+			}
+
 			input := firstValueBySuffix(vals, "_input")
 			if input == nil {
 				continue

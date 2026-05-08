@@ -240,6 +240,7 @@ type DiagnosticsPageData struct {
 	JournalTail     []string
 	OSTreeStatus    string
 	Modules         []DiagnosticsModuleStatus
+	RuntimeHints    []DiagnosticsRuntimeHint
 	StatusBadge     *templates.StatusBadge
 	BundlePath      string
 	BundleButton    string
@@ -259,6 +260,20 @@ type DiagnosticsModuleStatus struct {
 	Name   string
 	Health string
 	Detail string
+}
+
+// DiagnosticsRuntimeHint is an actionable hint shown on the diagnostics page
+// when a module is degraded. It surfaces recovery steps without requiring the
+// user to read logs.
+type DiagnosticsRuntimeHint struct {
+	// Module is the human-readable module name the hint belongs to.
+	Module string
+	// Level is "warning" or "info".
+	Level string
+	// Message is the actionable hint text.
+	Message string
+	// Fix is an optional command the user can run to resolve the issue.
+	Fix string
 }
 
 // PodmanPageData backs modules/podman.html.
