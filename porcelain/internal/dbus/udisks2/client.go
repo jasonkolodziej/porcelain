@@ -32,9 +32,11 @@ type BlockDevice struct {
 	IDType         string
 	IDLabel        string
 	IDUsage        string
+	MountPoints    []string
 	IsEncrypted    bool
 	EncryptionType string
 	HintIgnore     bool
+	HintSystem     bool
 	DriveModel     string
 	DriveVendor    string
 	DriveSerial    string
@@ -80,12 +82,21 @@ func (c *Client) ListBlockDevices(ctx context.Context) ([]BlockDevice, error) {
 		if v, ok := blockProps["HintIgnore"].Value().(bool); ok {
 			bd.HintIgnore = v
 		}
+		if v, ok := blockProps["HintSystem"].Value().(bool); ok {
+			bd.HintSystem = v
+		}
 
 		if cryptoProps, ok := ifaces[ifaceCrypto]; ok {
 			bd.IsEncrypted = true
 			bd.EncryptionType, _ = cryptoProps["MetadataSize"].Value().(string)
 			if bd.EncryptionType == "" {
 				bd.EncryptionType = "LUKS"
+			}
+		}
+
+		if fsProps, ok := ifaces[ifaceFS]; ok {
+			if mountPoints, ok := fsProps["MountPoints"]; ok {
+				bd.MountPoints = bytesToStrings(mountPoints)
 			}
 		}
 
@@ -135,5 +146,22 @@ func bytesToString(v godbus.Variant) string {
 		return raw
 	default:
 		return ""
+	}
+}
+
+func bytesToStrings(v godbus.Variant) []string {
+	switch raw := v.Value().(type) {
+	case [][]byte:
+		out := make([]string, 0, len(raw))
+		for _, item := range raw {
+			value := strings.TrimRight(string(item), "\x00")
+			if value == "" {
+				continue
+			}
+			out = append(out, value)
+		}
+		return out
+	default:
+		return nil
 	}
 }

@@ -24,6 +24,12 @@ import (
 	godbus "github.com/godbus/dbus/v5"
 )
 
+var bootMountPaths = map[string]bool{
+	"/":         true,
+	"/boot":     true,
+	"/boot/efi": true,
+}
+
 // Backend abstracts the data source the storage module renders from.
 type Backend interface {
 	// Snapshot returns a fresh view of the host's storage state.
@@ -133,7 +139,11 @@ func (m *Module) FormatBlock(ctx context.Context, objectPath, fsType string) err
 	if !ok || b == nil || b.client == nil {
 		return fmt.Errorf("storage: udisks2 backend unavailable")
 	}
-	return b.client.FormatBlock(ctx, godbus.ObjectPath(objectPath), fsType)
+	op := godbus.ObjectPath(objectPath)
+	if err := b.client.CheckNotBootDevice(ctx, op); err != nil {
+		return err
+	}
+	return b.client.FormatBlock(ctx, op, fsType)
 }
 
 // UnlockBlock unlocks an encrypted UDisks2 block object.
@@ -226,8 +236,11 @@ func (b *udisks2Backend) Snapshot(ctx context.Context) (viewdata.StorageData, er
 			Size:           d.Size,
 			Type:           classify(d),
 			Filesystem:     d.IDType,
+			Label:          d.IDLabel,
+			MountPoints:    d.MountPoints,
 			IsEncrypted:    d.IsEncrypted,
 			EncryptionType: d.EncryptionType,
+			IsBootDevice:   isBootDevice(d.MountPoints),
 		}
 		out.BlockDevices = append(out.BlockDevices, bd)
 		if d.IDType == "" && !d.IsEncrypted {
@@ -253,6 +266,15 @@ func classify(d udisks2.BlockDevice) string {
 	default:
 		return d.IDUsage
 	}
+}
+
+func isBootDevice(mountPoints []string) bool {
+	for _, mountPoint := range mountPoints {
+		if bootMountPaths[mountPoint] {
+			return true
+		}
+	}
+	return false
 }
 
 func firstNonEmpty(values ...string) string {

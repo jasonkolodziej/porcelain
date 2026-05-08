@@ -199,8 +199,11 @@ type BlockDevice struct {
 	Size           int64
 	Type           string
 	Filesystem     string
+	Label          string
+	MountPoints    []string
 	IsEncrypted    bool
 	EncryptionType string
+	IsBootDevice   bool
 }
 
 // Storage returns a stub storage payload.

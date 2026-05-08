@@ -18,3 +18,8 @@ func (c *Client) FormatBlock(_ context.Context, objectPath godbus.ObjectPath, fs
 func (c *Client) UnlockBlock(_ context.Context, objectPath godbus.ObjectPath, _ string) error {
 	return fmt.Errorf("udisks2 unlock %s unsupported on this platform", objectPath)
 }
+
+// CheckNotBootDevice is a no-op on non-Linux hosts.
+func (c *Client) CheckNotBootDevice(_ context.Context, _ godbus.ObjectPath) error {
+	return nil
+}
