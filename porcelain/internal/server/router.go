@@ -1430,26 +1430,27 @@ func appendModuleStatuses(ctx context.Context, registry *modules.Registry, data 
 // runtimeHintFor returns an actionable DiagnosticsRuntimeHint for well-known
 // degraded module states, or nil when no targeted advice is available.
 func runtimeHintFor(moduleID, detail string) *viewdata.DiagnosticsRuntimeHint {
+	const podmanModuleName = "Containers"
 	switch moduleID {
 	case "podman":
 		switch {
 		case strings.Contains(detail, "daemon unavailable"):
 			return &viewdata.DiagnosticsRuntimeHint{
-				Module:  "Containers",
+				Module:  podmanModuleName,
 				Level:   "warning",
 				Message: "Podman binary found but the socket/service is not responding. Start the user socket to enable container management.",
 				Fix:     "systemctl --user enable --now podman.socket",
 			}
 		case strings.Contains(detail, "not installed"):
 			return &viewdata.DiagnosticsRuntimeHint{
-				Module:  "Containers",
+				Module:  podmanModuleName,
 				Level:   "info",
 				Message: "Podman is not installed. Install it to enable container management.",
 				Fix:     "rpm-ostree install podman",
 			}
 		case strings.Contains(detail, "timed out"):
 			return &viewdata.DiagnosticsRuntimeHint{
-				Module:  "Containers",
+				Module:  podmanModuleName,
 				Level:   "warning",
 				Message: "Podman probe timed out. The socket may be slow or the service may be starting.",
 				Fix:     "systemctl --user status podman.socket",

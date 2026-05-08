@@ -336,7 +336,9 @@ func readSensorsJSON(ctx context.Context) ([]viewdata.SensorChip, error) {
 
 		readings := make([]viewdata.SensorReading, 0)
 		for _, featureName := range featureNames {
-			// Skip string-valued fields (e.g. "Adapter": "ISA adapter").
+			// sensors -j includes per-chip metadata fields (e.g. "Adapter": "ISA adapter")
+			// alongside numeric feature objects. These metadata fields are strings, not
+			// sensor readings, so skip any entry that does not unmarshal as a float64 map.
 			var vals map[string]float64
 			if err := json.Unmarshal(rawFeatureMap[featureName], &vals); err != nil {
 				continue
