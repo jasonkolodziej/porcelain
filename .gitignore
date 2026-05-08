@@ -146,3 +146,4 @@ vite.config.ts.timestamp-*
 **/Thumbs.db
 **/*.p12
 porcelain/porcelain-dev-ca.crt
+porcelain/porcelain-host-ca.crt
