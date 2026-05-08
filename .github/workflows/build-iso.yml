@@ -13,6 +13,7 @@ jobs:
       - name: Build ISO
         run: |
           mkdir -p output-iso
+          sudo podman pull ghcr.io/jasonkolodziej/porcelain-base:latest
           sudo podman run --rm --privileged --pull=newer \
             --security-opt label=type:unconfined_t \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
