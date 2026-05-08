@@ -324,8 +324,8 @@ func registerPodmanAPI(app *fiber.App, registry *modules.Registry, authorizer po
 
 func registerStorageAPI(app *fiber.App, registry *modules.Registry, authorizer policy.Authorizer) {
 	app.Post("/api/storage/devices/format", func(c fiber.Ctx) error {
-		device := strings.TrimSpace(c.FormValue("device"))
-		if err := authorizeWrite(c, authorizer, "storage.device.format", device); err != nil {
+		objectPath := strings.TrimSpace(c.FormValue("objectPath"))
+		if err := authorizeWrite(c, authorizer, "storage.device.format", objectPath); err != nil {
 			return err
 		}
 		if registry == nil {
@@ -339,18 +339,15 @@ func registerStorageAPI(app *fiber.App, registry *modules.Registry, authorizer p
 		if !isStorage {
 			return c.Status(fiber.StatusInternalServerError).SendString("invalid storage module type")
 		}
-		if !strings.HasPrefix(device, "/") {
-			device = "/" + device
-		}
-		if err := sm.FormatDevice(c.Context(), device, c.FormValue("fsType")); err != nil {
+		if err := sm.FormatBlock(c.Context(), objectPath, c.FormValue("fsType")); err != nil {
 			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
 		}
 		return c.JSON(map[string]string{"status": "ok"})
 	})
 
 	app.Post("/api/storage/devices/unlock", func(c fiber.Ctx) error {
-		device := strings.TrimSpace(c.FormValue("device"))
-		if err := authorizeWrite(c, authorizer, "storage.device.unlock", device); err != nil {
+		objectPath := strings.TrimSpace(c.FormValue("objectPath"))
+		if err := authorizeWrite(c, authorizer, "storage.device.unlock", objectPath); err != nil {
 			return err
 		}
 		if registry == nil {
@@ -364,10 +361,7 @@ func registerStorageAPI(app *fiber.App, registry *modules.Registry, authorizer p
 		if !isStorage {
 			return c.Status(fiber.StatusInternalServerError).SendString("invalid storage module type")
 		}
-		if !strings.HasPrefix(device, "/") {
-			device = "/" + device
-		}
-		if err := sm.UnlockDevice(c.Context(), device); err != nil {
+		if err := sm.UnlockBlock(c.Context(), objectPath, c.FormValue("passphrase")); err != nil {
 			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
 		}
 		return c.JSON(map[string]string{"status": "ok"})

@@ -297,7 +297,7 @@
                                         :class="darkMode ? 'hover:bg-porcelain-800 text-porcelain-400' : 'hover:bg-porcelain-100 text-porcelain-600'"
                                         title="Format"
                                     hx-post="/api/storage/devices/format"
-                                    hx-vals='{"device":"{{ .Device }}","fsType":"ext4"}'
+                                    hx-vals='{"objectPath":"{{ .ObjectPath }}","fsType":"ext4"}'
                                     hx-swap="none"
                                     @htmx:afterRequest="$dispatch('toast', { message: 'Format requested for {{ .Device }}', type: 'warning' })">
                                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -309,7 +309,7 @@
                                         :class="darkMode ? 'hover:bg-porcelain-800 text-porcelain-400' : 'hover:bg-porcelain-100 text-porcelain-600'"
                                         title="Unlock"
                                     hx-post="/api/storage/devices/unlock"
-                                    hx-vals='{"device":"{{ .Device }}"}'
+                                    hx-vals='{"objectPath":"{{ .ObjectPath }}"}'
                                     hx-swap="none"
                                     @htmx:afterRequest="$dispatch('toast', { message: 'Unlock requested for {{ .Device }}', type: 'info' })">
                                     <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

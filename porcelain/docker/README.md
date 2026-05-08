@@ -34,6 +34,13 @@ Notes:
 - If Diagnostics shows Storage/Network/Diagnostics as `ok` but Storage still
   reports `0 block devices`, check that `org.freedesktop.UDisks2` is available
   on the host system bus.
+- Block devices are visible via UDisks2 read-only introspection, but **disk
+  actions (Format, Unlock) cannot be performed**. The Format (`POST
+  /api/storage/devices/format`) and Unlock (`POST /api/storage/devices/unlock`)
+  handlers shell out to `udisksctl`, which in turn talks to UDisks2 over D-Bus.
+  Inside the distroless runtime image, `udisksctl` is present via bind-mount but
+  lacks the shared library environment and polkit authorisation context needed to
+  execute. Treat these actions as read-only in any containerised run.
 
 Quick host checks:
 

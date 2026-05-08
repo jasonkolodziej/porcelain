@@ -136,6 +136,18 @@ func (m *Module) FormatBlock(ctx context.Context, objectPath, fsType string) err
 	return b.client.FormatBlock(ctx, godbus.ObjectPath(objectPath), fsType)
 }
 
+// UnlockBlock unlocks an encrypted UDisks2 block object.
+func (m *Module) UnlockBlock(ctx context.Context, objectPath, passphrase string) error {
+	if m == nil {
+		return fmt.Errorf("storage: module is nil")
+	}
+	b, ok := m.backend.(*udisks2Backend)
+	if !ok || b == nil || b.client == nil {
+		return fmt.Errorf("storage: udisks2 backend unavailable")
+	}
+	return b.client.UnlockBlock(ctx, godbus.ObjectPath(objectPath), passphrase)
+}
+
 // FormatDevice formats a block device path via udisksctl.
 func (m *Module) FormatDevice(ctx context.Context, devicePath, fsType string) error {
 	devicePath = strings.TrimSpace(devicePath)
@@ -207,6 +219,7 @@ func (b *udisks2Backend) Snapshot(ctx context.Context) (viewdata.StorageData, er
 			continue
 		}
 		bd := viewdata.BlockDevice{
+			ObjectPath:     string(d.ObjectPath),
 			Device:         d.Device,
 			Path:           d.Device,
 			Model:          firstNonEmpty(d.DriveModel, d.DriveVendor),

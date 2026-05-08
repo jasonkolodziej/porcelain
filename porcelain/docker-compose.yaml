@@ -47,4 +47,47 @@ services:
     # Healthcheck is intentionally omitted because the listener requires
     # client mTLS; the docker-internal HEALTHCHECK probe cannot present a
     # client certificate.
+  porcelain-host-tools:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: porcelain:dev
+    container_name: porcelain-ui-host-tools
+    profiles:
+      - host-tools
+    ports:
+      - "8444:8443"
+    user: "0:0"
+    security_opt:
+      - label=disable
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      PORCELAIN_AUTH_ENABLED: "false"
+      PORCELAIN_DBUS_OPTIONAL: "false"
+      PORCELAIN_DBUS_ADDRESS: "unix:path=/run/dbus/system_bus_socket"
+      CONTAINER_HOST: "unix:///run/podman/podman.sock"
+    volumes:
+      # Core host integration paths.
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - /dev/zfs:/dev/zfs
+      - /usr/bin/zpool:/usr/bin/zpool:ro
+      - /usr/bin/zfs:/usr/bin/zfs:ro
+      - /etc/zfs:/etc/zfs:ro
+      - /lib64:/lib64:ro
+      - /usr/lib64:/usr/lib64:ro
+      # Optional command-based module tooling parity (Diagnostics/Storage/Podman/Sensors/Cloudflare).
+      - /usr/bin/journalctl:/usr/bin/journalctl:ro
+      - /usr/bin/rpm-ostree:/usr/bin/rpm-ostree:ro
+      - /usr/bin/udisksctl:/usr/bin/udisksctl:ro
+      - /usr/bin/podman:/usr/bin/podman:ro
+      - /usr/bin/sensors:/usr/bin/sensors:ro
+      # - /usr/bin/cloudflared:/usr/bin/cloudflared:ro #? only if cloudflared is installed on the host, and we want to support the Cloudflare module in host-tools
+      - /run/podman/podman.sock:/run/podman/podman.sock
+      - /etc/containers:/etc/containers:ro
+      - /var/lib/containers:/var/lib/containers
+    # Healthcheck is intentionally omitted because the listener requires
+    # client mTLS; the docker-internal HEALTHCHECK probe cannot present a
+    # client certificate.
 #  https://localhost:8443/healthz

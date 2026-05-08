@@ -498,3 +498,138 @@ Porcelain now starts from the same assumptions its long-term design requires:
 5. the planned UI can stay sleek and graphical without moving core control logic out of Go
 
 That gives the project a usable scaffold instead of a README-only architecture and leaves the major host integrations ready to fill in behind stable interfaces.
+
+
+
+
+----
+
+## whats left
+
+
+I’ll run a structured route audit now: first enumerate expected routes from the server code, then walk each UI page on the running instance and record what is missing due to code scaffolding versus host/container runtime dependencies.
+
+Ran terminal command:  grep -n "app.Get(\|app.Post(\|app.Delete(" internal/server/router.go | sed -n '1,260p'
+
+Ran terminal command:  grep -n "renderPage\|moduleOverview\|placeholderFor\|Detail" internal/server/router.go | sed -n '980,1700p'
+
+I have the route inventory; next I’m programmatically visiting each main UI route on the live service and extracting visible status/detail text so we can pinpoint missing code vs missing host/runtime wiring.
+
+Ran Playwright code
+Completed with input: const routes = ['/', '/storage', '/storage/zfs', '/network', '/network/firewall', '/network/cloudflare', '/podman', '/diagnostics', '/sensors'];
+const out = [];
+for (const r of routes) {
+  await page.goto('https://localhost:8444' + r, { waitUntil: 'domcontentloaded' });
+  const data = await page.evaluate(() => {
+    const h1 = document.querySelector('main h1')?.textContent?.trim() || '';
+    const firstP = document.querySelector('main p')?.textContent?.trim() || '';
+    const text = document.body.innerText;
+    const pick = (needle) => text.includes(needle);
+    return {
+      h1,
+      firstP,
+      hasDevFake: pick('developer fake'),
+      hasNotInstalled: pick('not installed'),
+      hasUnavailable: pick('unavailable'),
+      hasModuleHealth: pick('Module Health'),
+      hasNoDevices: pick('0 block devices') || pick('No block devices')
+    };
+  });
+  out.push({ route: r, ...data });
+}
+return out;
+
+I found concrete route results already; I’m now extracting exact error/detail strings per page (Podman, Cloudflare, ZFS, Sensors, Diagnostics) so I can split what is a code bug versus what is runtime/mount/profile related.
+
+Ran Playwright code
+Completed with input: const routes = ['/podman','/network/cloudflare','/storage/zfs','/sensors','/diagnostics','/storage'];
+const report = [];
+for (const r of routes) {
+  await page.goto('https://localhost:8444' + r, { waitUntil: 'domcontentloaded' });
+  const item = await page.evaluate((route) => {
+    const h1 = document.querySelector('main h1')?.textContent?.trim() || '';
+    const badge = Array.from(document.querySelectorAll('main *')).map(n => n.textContent?.trim()).find(t => ['ok','dev','degraded','planned','offline'].includes((t||'').toLowerCase())) || '';
+    const text = document.body.innerText.split('\n').map(s => s.trim()).filter(Boolean);
+    const interesting = text.filter(t => /(unavailable|not installed|failed|error|fake|no .*available|cannot|timed out|unsupported|denied|not found|module)/i.test(t));
+    return {
+      route,
+      h1,
+      badge,
+      details: interesting.slice(0,8)
+    };
+  }, r);
+  report.push(item);
+}
+return report;
+
+I’ve got the UI route results; I’m now checking the ZFS and Sensors module code paths that produced the errors so I can label each gap as either code behavior (needs fix) or docker/runtime dependency (needs mount/service).
+
+Read [](file:///root/Code/porcelain/porcelain/internal/modules/sensors/sensors.go#250-250), lines 250 to 416
+
+Read [](file:///root/Code/porcelain/porcelain/internal/modules/zfs/zfs.go#360-360), lines 360 to 590
+
+Read [](file:///root/Code/porcelain/porcelain/internal/server/router.go#470-470), lines 470 to 570
+
+I’ve isolated the main route outcomes: Storage/Network/Firewall are healthy, while Podman/Cloudflare/ZFS events/Sensors each fail for different reasons. I’ll do one quick runtime check to confirm which profile container is currently up before I give you the final missing-items matrix.
+
+Ran terminal command:  docker compose ps
+
+Read [](file:///root/Code/porcelain/porcelain/docker-compose.yaml)
+
+Completed a full UI route pass against the running host-tools service on 8444 and mapped each gap to either code behavior or runtime/dependency setup.
+
+What I walked:
+1. /
+2. /storage
+3. /storage/zfs
+4. /network
+5. /network/firewall
+6. /network/cloudflare
+7. /podman
+8. /diagnostics
+9. /sensors
+
+Current route status:
+1. Dashboard: healthy
+2. Storage: healthy, shows 5 block devices
+3. Network: healthy
+4. Firewall: healthy
+5. Diagnostics: healthy overall
+6. Cloudflare: degraded, cloudflared missing
+7. Containers: degraded, podman daemon unavailable
+8. ZFS subpage: loads, but events stream path returns 400
+9. Sensors: page loads, but parsing error and no readings
+
+Missing code-wise items:
+1. Sensors parser is too strict for real sensors -j output
+- Error observed: cannot unmarshal string into map[string]float64
+- Code location: sensors.go
+- Why: parser expects only numeric leaf maps, but sensors JSON includes string fields in many chips
+
+2. ZFS events endpoint treats normal empty/error cases as hard 400
+- Endpoint mapping returns 400 on RecentEvents error: router.go
+- RecentEvents currently fails hard on zpool events non-zero: zfs.go
+- Result in UI: repeated 400 and aborted stream when no usable event output
+
+3. ZFS status logic can show ok while data path is effectively failing
+- Status checks only zpool on PATH: zfs.go
+- Data path can still fail at runtime (list/events/status commands)
+
+Missing docker/runtime-wise items:
+1. Cloudflare module
+- Runtime dependency missing: cloudflared binary
+- Check in code: cloudflare.go
+
+2. Podman module
+- Binary is present, but probe says daemon unavailable
+- Probe path: podman.go
+- Likely runtime issue: podman socket/service accessibility, not route wiring
+
+What is confirmed good now:
+1. D-Bus module wiring for storage/network/firewall/diagnostics is functional in current run
+2. UDisks-backed block devices are visible on storage route
+
+If you want, I can do the next step now:
+1. Patch Sensors JSON parsing to tolerate mixed numeric/string payloads
+2. Patch ZFS events route to degrade gracefully instead of returning 400
+3. Add a small diagnostics card/detail for podman socket availability so podman failure is immediately actionable in UI

@@ -192,6 +192,7 @@ type Dataset struct {
 
 // BlockDevice is one row of the block device table.
 type BlockDevice struct {
+	ObjectPath     string
 	Device         string
 	Path           string
 	Model          string
