@@ -23,11 +23,14 @@ services:
       - host
     ports:
       - "8444:8443"
-    user: "0:0"
+    # user: "0:0"
     security_opt:
       - label=disable
     cap_add:
       - SYS_ADMIN
+    devices:
+      # Pass /dev/zfs as a device so the cgroup allows the character device.
+      - /dev/zfs:/dev/zfs
     environment:
       PORCELAIN_AUTH_ENABLED: "false"
       PORCELAIN_DBUS_OPTIONAL: "false"
@@ -37,8 +40,7 @@ services:
       # NetworkManager, firewalld).
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
       - /etc/machine-id:/etc/machine-id:ro
-      # Host ZFS device plus userspace tools/libs for zpool/zfs calls.
-      - /dev/zfs:/dev/zfs
+      # Host ZFS userspace tools/libs for zpool/zfs calls.
       - /usr/bin/zpool:/usr/bin/zpool:ro
       - /usr/bin/zfs:/usr/bin/zfs:ro
       - /etc/zfs:/etc/zfs:ro
@@ -62,6 +64,9 @@ services:
       - label=disable
     cap_add:
       - SYS_ADMIN
+    devices:
+      # Pass /dev/zfs as a device so the cgroup allows the character device.
+      - /dev/zfs:/dev/zfs
     environment:
       PORCELAIN_AUTH_ENABLED: "false"
       PORCELAIN_DBUS_OPTIONAL: "false"
@@ -71,7 +76,6 @@ services:
       # Core host integration paths.
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
       - /etc/machine-id:/etc/machine-id:ro
-      - /dev/zfs:/dev/zfs
       - /usr/bin/zpool:/usr/bin/zpool:ro
       - /usr/bin/zfs:/usr/bin/zfs:ro
       - /etc/zfs:/etc/zfs:ro
@@ -81,7 +85,7 @@ services:
       - /usr/bin/journalctl:/usr/bin/journalctl:ro
       - /usr/bin/rpm-ostree:/usr/bin/rpm-ostree:ro
       - /usr/bin/udisksctl:/usr/bin/udisksctl:ro
-      - /usr/bin/podman:/usr/bin/podman:ro
+      - /usr/bin/podman:/usr/bin/podman:x
       - /usr/bin/sensors:/usr/bin/sensors:ro
       # - /usr/bin/cloudflared:/usr/bin/cloudflared:ro #? only if cloudflared is installed on the host, and we want to support the Cloudflare module in host-tools
       - /run/podman/podman.sock:/run/podman/podman.sock
