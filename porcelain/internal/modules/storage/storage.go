@@ -10,7 +10,6 @@ package storage
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -55,11 +54,8 @@ func New(b Backend) *Module {
 func NewFromConnection(ctx context.Context, mgr *internaldbus.ConnectionManager) *Module {
 	conn, err := mgr.Dial(ctx)
 	if err != nil {
-		if errors.Is(err, internaldbus.ErrBusUnavailable) {
-			return New(NewFakeBackend())
-		}
-		// Any other dial error is also recoverable for the UI; fall back to
-		// the fake but record the cause via the module status.
+		// Any dial error is recoverable for the UI; fall back to the fake but
+		// record the cause via the module status.
 		fb := NewFakeBackend()
 		fb.note = err.Error()
 		return New(fb)
@@ -83,7 +79,11 @@ func (m *Module) Status(ctx context.Context) modules.Status {
 	case "udisks2":
 		return modules.Status{Health: modules.HealthOK, Detail: "UDisks2 connected"}
 	case "fake":
-		return modules.Status{Health: modules.HealthDegraded, Detail: "developer fake (no D-Bus)"}
+		detail := "developer fake (no D-Bus)"
+		if fb, ok := m.backend.(*fakeBackend); ok && fb != nil && fb.note != "" {
+			detail = fb.note
+		}
+		return modules.Status{Health: modules.HealthDegraded, Detail: detail}
 	default:
 		return modules.Status{Health: modules.HealthDegraded, Detail: m.backend.Kind()}
 	}

@@ -4,7 +4,6 @@ package firewall
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	internaldbus "github.com/jasonkolodziej/porcelain/porcelain/internal/dbus"
@@ -30,9 +29,6 @@ func NewFromConnection(ctx context.Context, mgr *internaldbus.ConnectionManager)
 	}
 	conn, err := mgr.Dial(ctx)
 	if err != nil {
-		if errors.Is(err, internaldbus.ErrBusUnavailable) {
-			return &Module{mode: "fake"}
-		}
 		return &Module{mode: "fake", note: err.Error()}
 	}
 	return &Module{conn: conn, client: firewalld.New(conn), mode: "firewalld"}

@@ -7,7 +7,6 @@ package diagnostics
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -61,12 +60,7 @@ type Module struct {
 func NewFromConnection(ctx context.Context, mgr *internaldbus.ConnectionManager) *Module {
 	conn, err := mgr.Dial(ctx)
 	if err != nil {
-		mode := "fake"
-		note := ""
-		if !errors.Is(err, internaldbus.ErrBusUnavailable) {
-			note = err.Error()
-		}
-		return &Module{mode: mode, note: note}
+		return &Module{mode: "fake", note: err.Error()}
 	}
 	return &Module{conn: conn, client: systemd.New(conn), mode: "systemd"}
 }

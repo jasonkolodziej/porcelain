@@ -13,3 +13,38 @@ services:
     # Healthcheck is intentionally omitted because the listener requires
     # client mTLS; the docker-internal HEALTHCHECK probe cannot present a
     # client certificate.
+  porcelain-host:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: porcelain:dev
+    container_name: porcelain-ui-host
+    profiles:
+      - host
+    ports:
+      - "8444:8443"
+    user: "0:0"
+    security_opt:
+      - label=disable
+    cap_add:
+      - SYS_ADMIN
+    environment:
+      PORCELAIN_AUTH_ENABLED: "false"
+      PORCELAIN_DBUS_OPTIONAL: "false"
+      PORCELAIN_DBUS_ADDRESS: "unix:path=/run/dbus/system_bus_socket"
+    volumes:
+      # System bus access for real host-backed modules (systemd, UDisks2,
+      # NetworkManager, firewalld).
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      # Host ZFS device plus userspace tools/libs for zpool/zfs calls.
+      - /dev/zfs:/dev/zfs
+      - /usr/bin/zpool:/usr/bin/zpool:ro
+      - /usr/bin/zfs:/usr/bin/zfs:ro
+      - /etc/zfs:/etc/zfs:ro
+      - /lib64:/lib64:ro
+      - /usr/lib64:/usr/lib64:ro
+    # Healthcheck is intentionally omitted because the listener requires
+    # client mTLS; the docker-internal HEALTHCHECK probe cannot present a
+    # client certificate.
+#  https://localhost:8443/healthz

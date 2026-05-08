@@ -135,6 +135,7 @@ RUN dnf install -y --skip-unavailable --setopt=install_weak_deps=False \
     lm_sensors \
     rasdaemon \
     edac-utils \
+    dbus-tools \
     thermald \
     \
     # Security & updates

@@ -14,6 +14,49 @@ docker compose up --build
 The daemon listens on `https://localhost:8443` with mandatory client
 certificate verification.
 
+## Host-backed hardware validation (D-Bus + ZFS)
+
+Use the dedicated host profile service when validating real host integrations
+from a containerized run:
+
+```sh
+cd porcelain
+docker compose --profile host up -d --build porcelain-host
+```
+
+This service listens on `https://localhost:8444` and is configured to use the
+host D-Bus socket and host ZFS tooling.
+
+Notes:
+
+- Run with `-d` for debugging sessions. Running in attached mode and pressing
+  `Ctrl+C` stops the container.
+- If Diagnostics shows Storage/Network/Diagnostics as `ok` but Storage still
+  reports `0 block devices`, check that `org.freedesktop.UDisks2` is available
+  on the host system bus.
+
+Quick host checks:
+
+```sh
+busctl --system list | grep -i udisks
+dbus-send --system --print-reply --dest=org.freedesktop.DBus / \
+  org.freedesktop.DBus.ListNames | grep -i udisks
+```
+
+On Fedora-like hosts without UDisks2, install and enable it:
+
+```sh
+sudo dnf install -y udisks2
+sudo systemctl enable --now udisks2.service
+```
+
+For rpm-ostree/bootc systems:
+
+```sh
+sudo rpm-ostree install udisks2
+# reboot required
+```
+
 ## Import the developer client certificate
 
 Copy the PKCS#12 bundle out of the running container and import it into the
