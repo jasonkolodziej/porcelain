@@ -246,6 +246,54 @@ func TestPolicyGatedWriteRoutesWithDexEnabled(t *testing.T) {
 			t.Fatalf("status: %d", resp.StatusCode)
 		}
 	})
+
+	t.Run("sensors threshold write rejected without bearer token", func(t *testing.T) {
+		client := newClient(bundle.ClientTLSConfig())
+		req, err := http.NewRequest(http.MethodPost, "https://"+addr+"/api/sensors/thresholds", nil)
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("do request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("status: %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("sensors threshold routes pass policy for admin group and reach module gate", func(t *testing.T) {
+		client := newClient(bundle.ClientTLSConfig())
+		for _, tc := range []struct {
+			method string
+			url    string
+		}{
+			{http.MethodPost, "https://" + addr + "/api/sensors/thresholds"},
+			{http.MethodDelete, "https://" + addr + "/api/sensors/thresholds?chip=chip0&reading=fan1"},
+			{http.MethodPost, "https://" + addr + "/api/sensors/thresholds/clear"},
+		} {
+			req, err := http.NewRequest(tc.method, tc.url, nil)
+			if err != nil {
+				t.Fatalf("new request: %v", err)
+			}
+			req.Header.Set("Authorization", "Bearer test-token")
+			req.Header.Set("X-Porcelain-Subject", "alice")
+			req.Header.Set("X-Porcelain-Groups", "porcelain-admins")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatalf("do request: %v", err)
+			}
+			resp.Body.Close()
+
+			if resp.StatusCode != http.StatusServiceUnavailable {
+				t.Fatalf("%s %s: status %d", tc.method, tc.url, resp.StatusCode)
+			}
+		}
+	})
 }
 
 func TestZFSEventStream(t *testing.T) {

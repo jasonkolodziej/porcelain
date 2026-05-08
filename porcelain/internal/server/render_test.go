@@ -21,8 +21,11 @@ package server_test
 //   TestPageRender_XPageTitle    – X-Page-Title header for breadcrumb sync
 
 import (
+	"context"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -30,13 +33,23 @@ import (
 
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/auth"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/config"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/modules"
+	sensorsmodule "github.com/jasonkolodziej/porcelain/porcelain/internal/modules/sensors"
+	storagemodule "github.com/jasonkolodziej/porcelain/porcelain/internal/modules/storage"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/server"
 	"github.com/jasonkolodziej/porcelain/porcelain/internal/testpki"
+	"github.com/jasonkolodziej/porcelain/porcelain/internal/viewdata"
 )
 
 // newRenderTestServer is the shared setup for all render tests. It always
 // runs with a nil registry so modules degrade gracefully to stubs.
 func newRenderTestServer(t *testing.T) (addr string, shutdown func(), client *http.Client) {
+	return newRenderTestServerWithRegistry(t, nil)
+}
+
+func newRenderTestServerWithRegistry(
+	t *testing.T, registry *modules.Registry,
+) (addr string, shutdown func(), client *http.Client) {
 	t.Helper()
 
 	bundle := testpki.New(t, "operator@example.com")
@@ -49,7 +62,7 @@ func newRenderTestServer(t *testing.T) (addr string, shutdown func(), client *ht
 	}
 
 	dexAuth := auth.NewDexAuth(cfg.Auth, nil)
-	app, err := server.NewRouter(cfg, dexAuth, nil)
+	app, err := server.NewRouter(cfg, dexAuth, registry)
 	if err != nil {
 		t.Fatalf("NewRouter: %v", err)
 	}
@@ -57,6 +70,43 @@ func newRenderTestServer(t *testing.T) (addr string, shutdown func(), client *ht
 	addr, shutdown = startMTLSServer(t, app, bundle)
 	client = newClient(bundle.ClientTLSConfig())
 	return addr, shutdown, client
+}
+
+type testStorageBackend struct {
+	data viewdata.StorageData
+}
+
+func (b *testStorageBackend) Snapshot(_ context.Context) (viewdata.StorageData, error) { return b.data, nil }
+func (b *testStorageBackend) Kind() string                                               { return "test" }
+func (b *testStorageBackend) Close() error                                               { return nil }
+
+func installFakeSensorsBinary(t *testing.T) (chipName, readingName string) {
+	t.Helper()
+
+	binDir := t.TempDir()
+	scriptPath := filepath.Join(binDir, "sensors")
+	script := `#!/bin/sh
+case "$1" in
+  -u)
+    exit 0
+    ;;
+  -j)
+    cat <<'EOF'
+{"coretemp-isa-0000":{"Package id 0":{"temp1_input":42.5,"temp1_max":90,"temp1_crit":100},"fan1":{"fan1_input":1200}}}
+EOF
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+`
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake sensors script: %v", err)
+	}
+
+	t.Setenv("PATH", binDir+":"+os.Getenv("PATH"))
+	t.Setenv("HOME", binDir)
+	return "coretemp-isa-0000", "fan1"
 }
 
 // parseBody reads the response body and parses it with goquery. It does NOT
@@ -460,6 +510,92 @@ func TestPageRender_ZFSPage(t *testing.T) {
 }
 
 // =========================================================================
+// TestPageRender_StoragePage validates storage device labels, mount points,
+// and boot-device action disabling while keeping non-boot actions enabled.
+// =========================================================================
+
+func TestPageRender_StoragePage(t *testing.T) {
+	registry := modules.NewRegistry()
+	registry.Register(storagemodule.New(&testStorageBackend{data: viewdata.StorageData{
+		Pools: []viewdata.Pool{{Name: "tank", Health: "ONLINE", RaidType: "mirror", Size: 2, Allocated: 1}},
+		BlockDevices: []viewdata.BlockDevice{
+			{
+				ObjectPath:   "/org/freedesktop/UDisks2/block_devices/nvme0n1p2",
+				Device:       "/dev/nvme0n1p2",
+				Model:        "Samsung SSD",
+				Size:         1024,
+				Type:         "filesystem",
+				Filesystem:   "ext4",
+				Label:        "ROOTFS",
+				MountPoints:  []string{"/", "/boot/efi"},
+				IsBootDevice: true,
+			},
+			{
+				ObjectPath:     "/org/freedesktop/UDisks2/block_devices/sdb1",
+				Device:         "/dev/sdb1",
+				Model:          "WD Red",
+				Size:           2048,
+				Type:           "encrypted",
+				Filesystem:     "xfs",
+				Label:          "DATA",
+				MountPoints:    []string{"/mnt/data"},
+				IsEncrypted:    true,
+				EncryptionType: "LUKS",
+			},
+		},
+	}}))
+
+	addr, shutdown, client := newRenderTestServerWithRegistry(t, registry)
+	defer shutdown()
+
+	resp := mustGet(t, client, "https://"+addr+"/storage")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	assertXPageTitle(t, resp, "Storage")
+
+	doc := parseBody(t, resp)
+	assertH1(t, doc, "Storage")
+	assertBreadcrumb(t, doc, "Storage")
+
+	bodyText := strings.TrimSpace(doc.Find("body").Text())
+	for _, want := range []string{"1 ZFS pools, 2 block devices", "ROOTFS", "/boot/efi", "DATA", "/mnt/data"} {
+		if !strings.Contains(bodyText, want) {
+			t.Fatalf("storage page missing %q", want)
+		}
+	}
+
+	bootRow := doc.Find("tr").FilterFunction(func(_ int, s *goquery.Selection) bool {
+		return strings.Contains(s.Text(), "/dev/nvme0n1p2")
+	}).First()
+	if bootRow.Length() == 0 {
+		t.Fatal("storage page: boot device row not found")
+	}
+	if bootRow.Find("button[disabled][title='Cannot format: active boot/root device']").Length() != 1 {
+		t.Fatal("storage page: boot device format button not disabled")
+	}
+
+	dataRow := doc.Find("tr").FilterFunction(func(_ int, s *goquery.Selection) bool {
+		return strings.Contains(s.Text(), "/dev/sdb1")
+	}).First()
+	if dataRow.Length() == 0 {
+		t.Fatal("storage page: data device row not found")
+	}
+	formatBtn := dataRow.Find("button[hx-post='/api/storage/devices/format']")
+	if formatBtn.Length() != 1 {
+		t.Fatal("storage page: non-boot format button missing")
+	}
+	if vals, ok := formatBtn.Attr("hx-vals"); !ok || !strings.Contains(vals, "sdb1") {
+		t.Fatalf("storage page: format hx-vals missing object path, got %q", vals)
+	}
+	if dataRow.Find("button[hx-post='/api/storage/devices/unlock']").Length() != 1 {
+		t.Fatal("storage page: encrypted device unlock button missing")
+	}
+}
+
+// =========================================================================
 // TestPageRender_CloudflarePage validates the Cloudflare page empty state.
 // =========================================================================
 
@@ -547,6 +683,103 @@ func TestPageRender_DiagnosticsPage(t *testing.T) {
 	body, _ := io.ReadAll(strings.NewReader(doc.Find("body").Text()))
 	if !strings.Contains(string(body), "Module Health") {
 		t.Fatal("diagnostics page: Module Health section not found")
+	}
+}
+
+// =========================================================================
+// TestPageRender_SensorsPage validates the first-class sensors page shell.
+// =========================================================================
+
+func TestPageRender_SensorsPage(t *testing.T) {
+	installFakeSensorsBinary(t)
+	registry := modules.NewRegistry()
+	registry.Register(sensorsmodule.New(context.Background()))
+
+	addr, shutdown, client := newRenderTestServerWithRegistry(t, registry)
+	defer shutdown()
+
+	resp := mustGet(t, client, "https://"+addr+"/sensors")
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status: %d", resp.StatusCode)
+	}
+	assertXPageTitle(t, resp, "Sensors")
+
+	doc := parseBody(t, resp)
+	assertH1(t, doc, "Sensors")
+	assertLeadText(t, doc, "Hardware telemetry via lm-sensors")
+	assertBreadcrumb(t, doc, "Sensors")
+
+	bodyText := strings.TrimSpace(doc.Find("body").Text())
+	for _, want := range []string{
+		"History Output",
+		"Persisted to disk and sampled each page refresh",
+		"Select a reading and click History to view recent samples.",
+		"coretemp-isa-0000",
+		"Package id 0",
+		"fan1",
+	} {
+		if !strings.Contains(bodyText, want) {
+			t.Fatalf("sensors page missing %q", want)
+		}
+	}
+
+	if doc.Find("button[hx-get^='/api/sensors/history?']").Length() == 0 {
+		t.Fatal("sensors page: history button wiring not found")
+	}
+	if doc.Find("button[hx-get^='/api/sensors/history/chart?']").Length() == 0 {
+		t.Fatal("sensors page: chart button wiring not found")
+	}
+}
+
+func TestSensorsHistoryAndChartAPI(t *testing.T) {
+	chipName, readingName := installFakeSensorsBinary(t)
+	registry := modules.NewRegistry()
+	registry.Register(sensorsmodule.New(context.Background()))
+
+	addr, shutdown, client := newRenderTestServerWithRegistry(t, registry)
+	defer shutdown()
+
+	for range 2 {
+		resp := mustGet(t, client, "https://"+addr+"/sensors")
+		resp.Body.Close()
+	}
+
+	historyResp := mustGet(
+		t,
+		client,
+		"https://"+addr+"/api/sensors/history?chip="+chipName+"&reading="+readingName+"&limit=60",
+	)
+	defer historyResp.Body.Close()
+	if historyResp.StatusCode != http.StatusOK {
+		t.Fatalf("history status: %d", historyResp.StatusCode)
+	}
+	historyBody, err := io.ReadAll(historyResp.Body)
+	if err != nil {
+		t.Fatalf("read history body: %v", err)
+	}
+	historyHTML := string(historyBody)
+	if !strings.Contains(historyHTML, "<pre") || !strings.Contains(historyHTML, "1200.00") {
+		t.Fatalf("unexpected history response: %q", historyHTML)
+	}
+
+	chartResp := mustGet(
+		t,
+		client,
+		"https://"+addr+"/api/sensors/history/chart?chip="+chipName+"&reading="+readingName+"&limit=60",
+	)
+	defer chartResp.Body.Close()
+	if chartResp.StatusCode != http.StatusOK {
+		t.Fatalf("chart status: %d", chartResp.StatusCode)
+	}
+	chartBody, err := io.ReadAll(chartResp.Body)
+	if err != nil {
+		t.Fatalf("read chart body: %v", err)
+	}
+	chartHTML := string(chartBody)
+	if !strings.Contains(chartHTML, "<svg") || !strings.Contains(chartHTML, chipName+" / "+readingName) {
+		t.Fatalf("unexpected chart response: %q", chartHTML)
 	}
 }
 

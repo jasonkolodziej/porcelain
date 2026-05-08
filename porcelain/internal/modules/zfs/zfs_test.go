@@ -1,5 +1,4 @@
 package zfs
-package zfs
 
 import (
 	"strings"

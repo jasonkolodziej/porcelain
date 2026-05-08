@@ -59,7 +59,7 @@ services:
       - host-tools
     ports:
       - "8444:8443"
-    # user: "0:0"
+    user: "0:0"
     security_opt:
       - label=disable
     cap_add:
@@ -85,10 +85,11 @@ services:
       - /usr/bin/journalctl:/usr/bin/journalctl:ro
       - /usr/bin/rpm-ostree:/usr/bin/rpm-ostree:ro
       - /usr/bin/udisksctl:/usr/bin/udisksctl:ro
-      - /usr/bin/podman:/usr/bin/podman:x
+      - /usr/bin/podman:/usr/bin/podman:ro
       - /usr/bin/sensors:/usr/bin/sensors:ro
       # - /usr/bin/cloudflared:/usr/bin/cloudflared:ro #? only if cloudflared is installed on the host, and we want to support the Cloudflare module in host-tools
-      - /run/podman/podman.sock:/run/podman/podman.sock:z
+      # Mount the parent directory so systemd can create/remove the socket file safely.
+      - /run/podman:/run/podman:z
       - /etc/containers:/etc/containers:ro
       - /var/lib/containers:/var/lib/containers
     # Healthcheck is intentionally omitted because the listener requires
