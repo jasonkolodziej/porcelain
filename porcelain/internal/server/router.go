@@ -498,7 +498,7 @@ func registerZFSAPI(app *fiber.App, registry *modules.Registry, authorizer polic
 		}
 		output, err := renderZFSEventsHTML(c.Context(), zm, limit)
 		if err != nil {
-			return c.Status(fiber.StatusBadRequest).SendString(err.Error())
+			output = renderZFSStreamErrorHTML(err)
 		}
 		c.Type("html")
 		return c.SendString(output)
@@ -1418,7 +1418,63 @@ func appendModuleStatuses(ctx context.Context, registry *modules.Registry, data 
 			Health: string(st.Health),
 			Detail: st.Detail,
 		})
+
+		if st.Health == modules.HealthDegraded || st.Health == modules.HealthUnavailable {
+			if hint := runtimeHintFor(m.ID(), st.Detail); hint != nil {
+				data.RuntimeHints = append(data.RuntimeHints, *hint)
+			}
+		}
 	}
+}
+
+// runtimeHintFor returns an actionable DiagnosticsRuntimeHint for well-known
+// degraded module states, or nil when no targeted advice is available.
+func runtimeHintFor(moduleID, detail string) *viewdata.DiagnosticsRuntimeHint {
+	switch moduleID {
+	case "podman":
+		switch {
+		case strings.Contains(detail, "daemon unavailable"):
+			return &viewdata.DiagnosticsRuntimeHint{
+				Module:  "Containers",
+				Level:   "warning",
+				Message: "Podman binary found but the socket/service is not responding. Start the user socket to enable container management.",
+				Fix:     "systemctl --user enable --now podman.socket",
+			}
+		case strings.Contains(detail, "not installed"):
+			return &viewdata.DiagnosticsRuntimeHint{
+				Module:  "Containers",
+				Level:   "info",
+				Message: "Podman is not installed. Install it to enable container management.",
+				Fix:     "rpm-ostree install podman",
+			}
+		case strings.Contains(detail, "timed out"):
+			return &viewdata.DiagnosticsRuntimeHint{
+				Module:  "Containers",
+				Level:   "warning",
+				Message: "Podman probe timed out. The socket may be slow or the service may be starting.",
+				Fix:     "systemctl --user status podman.socket",
+			}
+		}
+	case "cloudflare":
+		if strings.Contains(detail, "not installed") {
+			return &viewdata.DiagnosticsRuntimeHint{
+				Module:  "Cloudflare",
+				Level:   "info",
+				Message: "cloudflared is not installed. Install it to enable tunnel management.",
+				Fix:     "rpm-ostree install cloudflared",
+			}
+		}
+	case "zfs":
+		if strings.Contains(detail, "not installed") {
+			return &viewdata.DiagnosticsRuntimeHint{
+				Module:  "ZFS",
+				Level:   "info",
+				Message: "ZFS userspace tools (zpool/zfs) are not installed. Install zfs-fuse or kmod-zfs to enable pool management.",
+				Fix:     "rpm-ostree install zfs-fuse",
+			}
+		}
+	}
+	return nil
 }
 
 // sensorsPageData composes the sensors page from the sensors module snapshot.

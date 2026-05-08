@@ -82,6 +82,27 @@
         </section>
     </div>
 
+    {{ if .Data.RuntimeHints }}
+    <section class="rounded-2xl border p-6"
+             :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
+        <h2 class="text-lg font-semibold mb-3" :class="darkMode ? 'text-porcelain-100' : 'text-porcelain-900'">Actionable Hints</h2>
+        <div class="space-y-3">
+            {{ range .Data.RuntimeHints }}
+            <div class="rounded-lg border px-4 py-3 {{ if eq .Level "warning" }}border-amber-500/40 bg-amber-500/10{{ else }}border-sky-500/40 bg-sky-500/10{{ end }}">
+                <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xs font-semibold uppercase {{ if eq .Level "warning" }}text-amber-600{{ else }}text-sky-600{{ end }}">{{ .Module }}</span>
+                    <span class="badge {{ if eq .Level "warning" }}badge-warning{{ else }}badge-neutral{{ end }}">{{ .Level }}</span>
+                </div>
+                <p class="text-sm" :class="darkMode ? 'text-porcelain-200' : 'text-porcelain-800'">{{ .Message }}</p>
+                {{ if .Fix }}
+                <pre class="mt-2 rounded px-3 py-1.5 font-mono text-xs" :class="darkMode ? 'bg-porcelain-950/60 text-porcelain-300' : 'bg-porcelain-100 text-porcelain-700'">{{ .Fix }}</pre>
+                {{ end }}
+            </div>
+            {{ end }}
+        </div>
+    </section>
+    {{ end }}
+
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section class="rounded-2xl border p-6"
                  :class="darkMode ? 'bg-porcelain-900/50 border-porcelain-800' : 'bg-white border-porcelain-200'">
